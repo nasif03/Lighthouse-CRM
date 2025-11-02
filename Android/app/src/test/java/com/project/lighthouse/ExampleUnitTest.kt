@@ -1,4 +1,4 @@
-package com.example.lighthouse
+package com.project.lighthouse
 
 import org.junit.Test
 

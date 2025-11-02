@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "279455915929",
+    "project_id": "lighthouse-crm-23713",
+    "storage_bucket": "lighthouse-crm-23713.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:279455915929:android:a89fce4ec9c0e8bb7dbd08",
+        "android_client_info": {
+          "package_name": "com.project.lighthouse"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "279455915929-ofced463q7634isdfk7lm4k6vhp2fqtv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.project.lighthouse",
+            "certificate_hash": "8e1ecf3beb2b9e8f0c5b866713a487f18815541e"
+          }
+        },
+        {
+          "client_id": "279455915929-60u0bnmu864r08fp5udb04gov1ejbhdd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbDxMOvcASjowVfFo7fD9-N21TE1gAlyM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "279455915929-60u0bnmu864r08fp5udb04gov1ejbhdd.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-package com.example.lighthouse.ui.theme
+package com.project.lighthouse.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
