@@ -11,7 +11,7 @@ export function Table({ children }: PropsWithChildren) {
 }
 
 export function THead({ children }: PropsWithChildren) {
-  return <thead className="bg-gray-50 text-left text-gray-600">{children}</thead>;
+  return <thead className="bg-gray-50 text-left text-gray-700">{children}</thead>;
 }
 
 export function TBody({ children }: PropsWithChildren) {
@@ -19,7 +19,7 @@ export function TBody({ children }: PropsWithChildren) {
 }
 
 export function TR({ children }: PropsWithChildren) {
-  return <tr className="hover:bg-gray-50/60">{children}</tr>;
+  return <tr className="hover:bg-gray-50">{children}</tr>;
 }
 
 export function TH({ children }: { children: ReactNode }) {
