@@ -64,7 +64,7 @@ export default function InboxSidebar() {
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-white">
+    <div className="h-full w-full flex flex-col">
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Inbox</h2>

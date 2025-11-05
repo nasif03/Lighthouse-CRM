@@ -1,6 +1,6 @@
 # Lighthouse CRM - Frontend
 
-A modern, multi-tenant CRM web application built with React, TypeScript, and Tailwind CSS. Focused on marketing campaign management with an integrated messaging system.
+A modern, multi-tenant CRM web application built with React, TypeScript, and Tailwind CSS. Designed for business owners to manage sales, marketing, customer support, and administration with an integrated messaging system.
 
 ## 🚀 Tech Stack
 
@@ -28,10 +28,13 @@ Frontend/
 │   │   ├── Dashboard.tsx
 │   │   ├── Leads.tsx
 │   │   ├── Contacts.tsx
+│   │   ├── Deals.tsx
 │   │   ├── Campaigns.tsx
 │   │   ├── Segments.tsx
 │   │   ├── Templates.tsx
 │   │   ├── Analytics.tsx
+│   │   ├── Support.tsx
+│   │   ├── Administration.tsx
 │   │   ├── Settings.tsx
 │   │   └── Login.tsx
 │   ├── store/               # Zustand state stores
@@ -53,14 +56,28 @@ Frontend/
 
 ### Core CRM Features
 
-1. **Dashboard** - Overview with key metrics (Active Campaigns, New Leads, Email Open Rate)
-2. **Leads Management** - View, search, and manage leads with status tracking
-3. **Contacts** - Contact management with company information
-4. **Campaigns** - Marketing campaign management with status tracking (Active/Completed tabs)
-5. **Segments** - Customer segmentation with contact counts
-6. **Templates** - Email template management
-7. **Analytics** - Campaign performance and lead source analytics
-8. **Settings** - Workspace configuration (multi-tenant)
+Organized into business-focused sections:
+
+#### Overview
+- **Dashboard** - Overview with key metrics (Active Campaigns, New Leads, Email Open Rate)
+
+#### Sales
+- **Leads Management** - View, search, and manage leads with status tracking
+- **Contacts** - Contact management with company information
+- **Deals** - Deal/Sales pipeline management with value, stage, and probability tracking
+
+#### Marketing
+- **Campaigns** - Marketing campaign management with status tracking (Active/Completed tabs)
+- **Segments** - Customer segmentation with contact counts
+- **Templates** - Email template management
+- **Analytics** - Campaign performance and lead source analytics
+
+#### Customer Support
+- **Support Tickets** - Customer support ticket management with priority levels and status tracking
+
+#### Administration
+- **Administration** - Business administration tools (Users, Roles & Permissions, Workspace Settings, Integrations)
+- **Settings** - Workspace configuration (multi-tenant)
 
 ### Multi-Tenant Support
 
@@ -131,34 +148,60 @@ A comprehensive design system with reusable components:
 
 React Router v6 with the following routes:
 
+### Overview
 - `/` - Dashboard (default)
+
+### Sales
 - `/leads` - Leads management
 - `/contacts` - Contacts
+- `/deals` - Deals/Sales pipeline
+
+### Marketing
 - `/campaigns` - Campaigns
 - `/segments` - Segments
 - `/templates` - Templates
 - `/analytics` - Analytics
+
+### Customer Support
+- `/support` - Support Tickets
+
+### Administration
+- `/administration` - Administration
 - `/settings` - Settings
+
+### Authentication
 - `/login` - Login page (outside main layout)
 
 All routes except `/login` are wrapped in `AppLayout` which provides:
-- Sidebar navigation
-- Header with search, tenant switcher, user info
-- Right-side inbox panel (persistent)
+- Sidebar navigation organized by business function (Sales and Marketing separated)
+- Header spanning main content and inbox area with fixed-width title, tenant switcher, and user info
+- Right-side inbox panel (persistent, 420px width)
 
 ## 📦 Layout Structure
 
 ```
-┌─────────────────────────────────────────────┐
-│  Sidebar  │  Header (with search, tenant)  │  Inbox Panel │
-│  (260px)  │                                 │  (420px)     │
-│           ├─────────────────────────────────┤              │
-│           │                                 │              │
-│           │      Main Content Area          │              │
-│           │      (Dynamic Page Content)     │              │
-│           │                                 │              │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ Sidebar │  Header (title, tenant, user, logout)  │ Inbox │
+│(280px)  │  (spans main + inbox columns)         │(420px)│
+│         ├─────────────────────────────────────────┤       │
+│         │                                           │       │
+│         │      Main Content Area                    │       │
+│         │      (Dynamic Page Content)               │       │
+│         │                                           │       │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+### Sidebar Navigation Structure
+
+The sidebar is organized into clear sections for business owners:
+
+1. **Overview** - Dashboard
+2. **Sales** - Leads, Contacts, Deals
+3. **Marketing** - Campaigns, Segments, Templates, Analytics
+4. **Customer Support** - Support Tickets
+5. **Administration** - Administration, Settings
+
+Each section has a header label with grouped navigation items below.
 
 ## 🚀 Getting Started
 
@@ -214,9 +257,11 @@ npm run preview
 Currently using mock data for:
 - Leads (8 sample leads)
 - Contacts (2 sample contacts)
+- Deals (2 sample deals with value, stage, probability)
 - Campaigns (2 sample campaigns)
 - Segments (2 sample segments)
 - Templates (2 sample templates)
+- Support Tickets (2 sample tickets with priority and status)
 - Conversations (3 sample conversations with Alex, Sarah, Mike)
 
 ## 🔧 Configuration
@@ -246,6 +291,9 @@ Custom brand colors configured in `tailwind.config.js`:
 ## 📝 Notes
 
 - **No Backend Integration Yet**: All data is mock data stored in Zustand stores
+- **Business Owner Focus**: Sidebar organized by business function for easy navigation
+- **Integrated Inbox**: Inbox panel seamlessly integrated into main layout background
+- **Header Coverage**: Header spans both main content and inbox areas for unified interface
 - **VoIP Integration Ready**: Call buttons are in place, ready for open-source VoIP library integration
 - **Responsive Design**: Basic responsive breakpoints, optimized for desktop-first
 - **Accessibility**: Semantic HTML and ARIA labels where appropriate
