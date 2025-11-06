@@ -38,6 +38,9 @@ db = mongo_client.lighthousecrm
 users_collection = db.users
 organizations_collection = db.organizations
 leads_collection = db.leads
+contacts_collection = db.contacts
+accounts_collection = db.accounts
+deals_collection = db.deals
 
 # Test database connection
 try:
@@ -107,6 +110,113 @@ class LeadResponse(BaseModel):
     status: str
     ownerId: str
     orgId: str
+    createdAt: str
+    updatedAt: str
+
+# Contacts Models
+class CreateContactRequest(BaseModel):
+    firstName: str
+    lastName: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    title: Optional[str] = None
+    accountId: Optional[str] = None
+    tags: Optional[list[str]] = None
+
+class UpdateContactRequest(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    title: Optional[str] = None
+    accountId: Optional[str] = None
+    tags: Optional[list[str]] = None
+
+class ContactResponse(BaseModel):
+    id: str
+    firstName: str
+    lastName: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    title: Optional[str] = None
+    accountId: Optional[str] = None
+    ownerId: str
+    orgId: str
+    tags: list[str]
+    createdAt: str
+    updatedAt: str
+
+# Accounts Models
+class CreateAccountRequest(BaseModel):
+    name: str
+    domain: Optional[str] = None
+    industry: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    address: Optional[dict] = None
+
+class UpdateAccountRequest(BaseModel):
+    name: Optional[str] = None
+    domain: Optional[str] = None
+    industry: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    address: Optional[dict] = None
+
+class AccountResponse(BaseModel):
+    id: str
+    name: str
+    domain: Optional[str] = None
+    industry: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    ownerId: str
+    orgId: str
+    createdAt: str
+    updatedAt: str
+
+# Deals Models
+class CreateDealRequest(BaseModel):
+    name: str
+    accountId: Optional[str] = None
+    contactId: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = "USD"
+    stageId: Optional[str] = None
+    stageName: Optional[str] = None
+    probability: Optional[float] = None
+    closeDate: Optional[str] = None
+    status: Optional[str] = "open"
+    tags: Optional[list[str]] = None
+
+class UpdateDealRequest(BaseModel):
+    name: Optional[str] = None
+    accountId: Optional[str] = None
+    contactId: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    stageId: Optional[str] = None
+    stageName: Optional[str] = None
+    probability: Optional[float] = None
+    closeDate: Optional[str] = None
+    status: Optional[str] = None
+    tags: Optional[list[str]] = None
+
+class DealResponse(BaseModel):
+    id: str
+    name: str
+    accountId: Optional[str] = None
+    contactId: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    stageId: Optional[str] = None
+    stageName: Optional[str] = None
+    probability: Optional[float] = None
+    closeDate: Optional[str] = None
+    status: str
+    ownerId: str
+    orgId: str
+    tags: list[str]
     createdAt: str
     updatedAt: str
 
@@ -436,6 +546,672 @@ async def get_leads(current_user: dict = Depends(get_current_user)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch leads: {str(e)}")
+
+# Contacts endpoints
+@app.get("/api/contacts", response_model=list[ContactResponse])
+async def get_contacts(current_user: dict = Depends(get_current_user)):
+    """Get all contacts for the current user's organization"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        contacts = list(contacts_collection.find({"orgId": org_id, "deleted": {"$ne": True}}).sort("createdAt", -1))
+        
+        return [
+            ContactResponse(
+                id=str(contact["_id"]),
+                firstName=contact.get("firstName", ""),
+                lastName=contact.get("lastName"),
+                email=contact.get("email", ""),
+                phone=contact.get("phone"),
+                title=contact.get("title"),
+                accountId=str(contact["accountId"]) if contact.get("accountId") else None,
+                ownerId=contact.get("ownerId", ""),
+                orgId=contact.get("orgId", ""),
+                tags=contact.get("tags", []),
+                createdAt=contact.get("createdAt").isoformat() if contact.get("createdAt") else "",
+                updatedAt=contact.get("updatedAt").isoformat() if contact.get("updatedAt") else ""
+            )
+            for contact in contacts
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching contacts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch contacts: {str(e)}")
+
+@app.post("/api/contacts", response_model=ContactResponse)
+async def create_contact(request: CreateContactRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new contact"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        owner_id = str(user_doc["_id"])
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        now = datetime.utcnow()
+        
+        contact_data = {
+            "firstName": request.firstName,
+            "lastName": request.lastName or "",
+            "email": request.email,
+            "phone": request.phone or "",
+            "title": request.title or "",
+            "accountId": ObjectId(request.accountId) if request.accountId else None,
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "tags": request.tags or [],
+            "metadata": None,
+            "deleted": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        
+        result = contacts_collection.insert_one(contact_data)
+        contact_id = str(result.inserted_id)
+        
+        return ContactResponse(
+            id=contact_id,
+            firstName=request.firstName,
+            lastName=request.lastName,
+            email=request.email,
+            phone=request.phone,
+            title=request.title,
+            accountId=request.accountId,
+            ownerId=owner_id,
+            orgId=org_id,
+            tags=request.tags or [],
+            createdAt=now.isoformat(),
+            updatedAt=now.isoformat()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating contact: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create contact: {str(e)}")
+
+@app.put("/api/contacts/{contact_id}", response_model=ContactResponse)
+async def update_contact(contact_id: str, request: UpdateContactRequest, current_user: dict = Depends(get_current_user)):
+    """Update a contact"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        contact = contacts_collection.find_one({"_id": ObjectId(contact_id), "orgId": org_id})
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        
+        update_data = {"updatedAt": datetime.utcnow()}
+        if request.firstName is not None:
+            update_data["firstName"] = request.firstName
+        if request.lastName is not None:
+            update_data["lastName"] = request.lastName
+        if request.email is not None:
+            update_data["email"] = request.email
+        if request.phone is not None:
+            update_data["phone"] = request.phone
+        if request.title is not None:
+            update_data["title"] = request.title
+        if request.accountId is not None:
+            update_data["accountId"] = ObjectId(request.accountId) if request.accountId else None
+        if request.tags is not None:
+            update_data["tags"] = request.tags
+        
+        contacts_collection.update_one({"_id": ObjectId(contact_id)}, {"$set": update_data})
+        
+        updated_contact = contacts_collection.find_one({"_id": ObjectId(contact_id)})
+        return ContactResponse(
+            id=str(updated_contact["_id"]),
+            firstName=updated_contact.get("firstName", ""),
+            lastName=updated_contact.get("lastName"),
+            email=updated_contact.get("email", ""),
+            phone=updated_contact.get("phone"),
+            title=updated_contact.get("title"),
+            accountId=str(updated_contact["accountId"]) if updated_contact.get("accountId") else None,
+            ownerId=updated_contact.get("ownerId", ""),
+            orgId=updated_contact.get("orgId", ""),
+            tags=updated_contact.get("tags", []),
+            createdAt=updated_contact.get("createdAt").isoformat() if updated_contact.get("createdAt") else "",
+            updatedAt=updated_contact.get("updatedAt").isoformat() if updated_contact.get("updatedAt") else ""
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating contact: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update contact: {str(e)}")
+
+@app.delete("/api/contacts/{contact_id}")
+async def delete_contact(contact_id: str, current_user: dict = Depends(get_current_user)):
+    """Soft delete a contact"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        contact = contacts_collection.find_one({"_id": ObjectId(contact_id), "orgId": org_id})
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        
+        contacts_collection.update_one(
+            {"_id": ObjectId(contact_id)},
+            {"$set": {"deleted": True, "updatedAt": datetime.utcnow()}}
+        )
+        
+        return {"message": "Contact deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting contact: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete contact: {str(e)}")
+
+# Accounts endpoints
+@app.get("/api/accounts", response_model=list[AccountResponse])
+async def get_accounts(current_user: dict = Depends(get_current_user)):
+    """Get all accounts for the current user's organization"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        accounts = list(accounts_collection.find({"orgId": org_id, "deleted": {"$ne": True}}).sort("createdAt", -1))
+        
+        return [
+            AccountResponse(
+                id=str(account["_id"]),
+                name=account.get("name", ""),
+                domain=account.get("domain"),
+                industry=account.get("industry"),
+                phone=account.get("phone"),
+                status=account.get("status"),
+                ownerId=account.get("ownerId", ""),
+                orgId=account.get("orgId", ""),
+                createdAt=account.get("createdAt").isoformat() if account.get("createdAt") else "",
+                updatedAt=account.get("updatedAt").isoformat() if account.get("updatedAt") else ""
+            )
+            for account in accounts
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching accounts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch accounts: {str(e)}")
+
+@app.post("/api/accounts", response_model=AccountResponse)
+async def create_account(request: CreateAccountRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new account"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        owner_id = str(user_doc["_id"])
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        now = datetime.utcnow()
+        
+        account_data = {
+            "name": request.name,
+            "domain": request.domain or "",
+            "industry": request.industry or "",
+            "phone": request.phone or "",
+            "status": request.status or "active",
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "metadata": None,
+            "address": request.address,
+            "deleted": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        
+        result = accounts_collection.insert_one(account_data)
+        account_id = str(result.inserted_id)
+        
+        return AccountResponse(
+            id=account_id,
+            name=request.name,
+            domain=request.domain,
+            industry=request.industry,
+            phone=request.phone,
+            status=request.status or "active",
+            ownerId=owner_id,
+            orgId=org_id,
+            createdAt=now.isoformat(),
+            updatedAt=now.isoformat()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create account: {str(e)}")
+
+@app.put("/api/accounts/{account_id}", response_model=AccountResponse)
+async def update_account(account_id: str, request: UpdateAccountRequest, current_user: dict = Depends(get_current_user)):
+    """Update an account"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        update_data = {"updatedAt": datetime.utcnow()}
+        if request.name is not None:
+            update_data["name"] = request.name
+        if request.domain is not None:
+            update_data["domain"] = request.domain
+        if request.industry is not None:
+            update_data["industry"] = request.industry
+        if request.phone is not None:
+            update_data["phone"] = request.phone
+        if request.status is not None:
+            update_data["status"] = request.status
+        if request.address is not None:
+            update_data["address"] = request.address
+        
+        accounts_collection.update_one({"_id": ObjectId(account_id)}, {"$set": update_data})
+        
+        updated_account = accounts_collection.find_one({"_id": ObjectId(account_id)})
+        return AccountResponse(
+            id=str(updated_account["_id"]),
+            name=updated_account.get("name", ""),
+            domain=updated_account.get("domain"),
+            industry=updated_account.get("industry"),
+            phone=updated_account.get("phone"),
+            status=updated_account.get("status"),
+            ownerId=updated_account.get("ownerId", ""),
+            orgId=updated_account.get("orgId", ""),
+            createdAt=updated_account.get("createdAt").isoformat() if updated_account.get("createdAt") else "",
+            updatedAt=updated_account.get("updatedAt").isoformat() if updated_account.get("updatedAt") else ""
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update account: {str(e)}")
+
+@app.get("/api/accounts/{account_id}")
+async def get_account(account_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a single account with linked contacts and deals"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        # Get linked contacts
+        linked_contacts = list(contacts_collection.find({
+            "accountId": ObjectId(account_id),
+            "orgId": org_id,
+            "deleted": {"$ne": True}
+        }))
+        
+        # Get linked deals
+        linked_deals = list(deals_collection.find({
+            "accountId": ObjectId(account_id),
+            "orgId": org_id
+        }))
+        
+        return {
+            "account": AccountResponse(
+                id=str(account["_id"]),
+                name=account.get("name", ""),
+                domain=account.get("domain"),
+                industry=account.get("industry"),
+                phone=account.get("phone"),
+                status=account.get("status"),
+                ownerId=account.get("ownerId", ""),
+                orgId=account.get("orgId", ""),
+                createdAt=account.get("createdAt").isoformat() if account.get("createdAt") else "",
+                updatedAt=account.get("updatedAt").isoformat() if account.get("updatedAt") else ""
+            ),
+            "contacts": [
+                {
+                    "id": str(c["_id"]),
+                    "firstName": c.get("firstName", ""),
+                    "lastName": c.get("lastName"),
+                    "email": c.get("email", ""),
+                }
+                for c in linked_contacts
+            ],
+            "deals": [
+                {
+                    "id": str(d["_id"]),
+                    "name": d.get("name", ""),
+                    "amount": d.get("amount"),
+                    "currency": d.get("currency"),
+                    "status": d.get("status", "open"),
+                }
+                for d in linked_deals
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch account: {str(e)}")
+
+@app.delete("/api/accounts/{account_id}")
+async def delete_account(account_id: str, current_user: dict = Depends(get_current_user)):
+    """Soft delete an account"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        accounts_collection.update_one(
+            {"_id": ObjectId(account_id)},
+            {"$set": {"deleted": True, "updatedAt": datetime.utcnow()}}
+        )
+        
+        return {"message": "Account deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+
+# Deals endpoints
+@app.get("/api/deals", response_model=list[DealResponse])
+async def get_deals(current_user: dict = Depends(get_current_user)):
+    """Get all deals for the current user's organization"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        deals = list(deals_collection.find({"orgId": org_id}).sort("createdAt", -1))
+        
+        return [
+            DealResponse(
+                id=str(deal["_id"]),
+                name=deal.get("name", ""),
+                accountId=str(deal["accountId"]) if deal.get("accountId") else None,
+                contactId=str(deal["contactId"]) if deal.get("contactId") else None,
+                amount=deal.get("amount"),
+                currency=deal.get("currency"),
+                stageId=deal.get("stageId"),
+                stageName=deal.get("stageName"),
+                probability=deal.get("probability"),
+                closeDate=deal.get("closeDate").isoformat() if deal.get("closeDate") else None,
+                status=deal.get("status", "open"),
+                ownerId=deal.get("ownerId", ""),
+                orgId=deal.get("orgId", ""),
+                tags=deal.get("tags", []),
+                createdAt=deal.get("createdAt").isoformat() if deal.get("createdAt") else "",
+                updatedAt=deal.get("updatedAt").isoformat() if deal.get("updatedAt") else ""
+            )
+            for deal in deals
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching deals: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch deals: {str(e)}")
+
+@app.post("/api/deals", response_model=DealResponse)
+async def create_deal(request: CreateDealRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new deal"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        owner_id = str(user_doc["_id"])
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        now = datetime.utcnow()
+        close_date = None
+        if request.closeDate:
+            try:
+                close_date = datetime.fromisoformat(request.closeDate.replace('Z', '+00:00'))
+            except:
+                pass
+        
+        deal_data = {
+            "name": request.name,
+            "accountId": ObjectId(request.accountId) if request.accountId else None,
+            "contactId": ObjectId(request.contactId) if request.contactId else None,
+            "amount": request.amount,
+            "currency": request.currency or "USD",
+            "stageId": request.stageId or "",
+            "stageName": request.stageName or "",
+            "probability": request.probability,
+            "closeDate": close_date,
+            "status": request.status or "open",
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "tags": request.tags or [],
+            "lastActivityAt": now,
+            "metadata": None,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        
+        result = deals_collection.insert_one(deal_data)
+        deal_id = str(result.inserted_id)
+        
+        return DealResponse(
+            id=deal_id,
+            name=request.name,
+            accountId=request.accountId,
+            contactId=request.contactId,
+            amount=request.amount,
+            currency=request.currency or "USD",
+            stageId=request.stageId,
+            stageName=request.stageName,
+            probability=request.probability,
+            closeDate=request.closeDate,
+            status=request.status or "open",
+            ownerId=owner_id,
+            orgId=org_id,
+            tags=request.tags or [],
+            createdAt=now.isoformat(),
+            updatedAt=now.isoformat()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating deal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create deal: {str(e)}")
+
+@app.put("/api/deals/{deal_id}", response_model=DealResponse)
+async def update_deal(deal_id: str, request: UpdateDealRequest, current_user: dict = Depends(get_current_user)):
+    """Update a deal"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        deal = deals_collection.find_one({"_id": ObjectId(deal_id), "orgId": org_id})
+        if not deal:
+            raise HTTPException(status_code=404, detail="Deal not found")
+        
+        update_data = {"updatedAt": datetime.utcnow(), "lastActivityAt": datetime.utcnow()}
+        if request.name is not None:
+            update_data["name"] = request.name
+        if request.accountId is not None:
+            update_data["accountId"] = ObjectId(request.accountId) if request.accountId else None
+        if request.contactId is not None:
+            update_data["contactId"] = ObjectId(request.contactId) if request.contactId else None
+        if request.amount is not None:
+            update_data["amount"] = request.amount
+        if request.currency is not None:
+            update_data["currency"] = request.currency
+        if request.stageId is not None:
+            update_data["stageId"] = request.stageId
+        if request.stageName is not None:
+            update_data["stageName"] = request.stageName
+        if request.probability is not None:
+            update_data["probability"] = request.probability
+        if request.closeDate is not None:
+            try:
+                update_data["closeDate"] = datetime.fromisoformat(request.closeDate.replace('Z', '+00:00'))
+            except:
+                pass
+        if request.status is not None:
+            update_data["status"] = request.status
+        if request.tags is not None:
+            update_data["tags"] = request.tags
+        
+        deals_collection.update_one({"_id": ObjectId(deal_id)}, {"$set": update_data})
+        
+        updated_deal = deals_collection.find_one({"_id": ObjectId(deal_id)})
+        return DealResponse(
+            id=str(updated_deal["_id"]),
+            name=updated_deal.get("name", ""),
+            accountId=str(updated_deal["accountId"]) if updated_deal.get("accountId") else None,
+            contactId=str(updated_deal["contactId"]) if updated_deal.get("contactId") else None,
+            amount=updated_deal.get("amount"),
+            currency=updated_deal.get("currency"),
+            stageId=updated_deal.get("stageId"),
+            stageName=updated_deal.get("stageName"),
+            probability=updated_deal.get("probability"),
+            closeDate=updated_deal.get("closeDate").isoformat() if updated_deal.get("closeDate") else None,
+            status=updated_deal.get("status", "open"),
+            ownerId=updated_deal.get("ownerId", ""),
+            orgId=updated_deal.get("orgId", ""),
+            tags=updated_deal.get("tags", []),
+            createdAt=updated_deal.get("createdAt").isoformat() if updated_deal.get("createdAt") else "",
+            updatedAt=updated_deal.get("updatedAt").isoformat() if updated_deal.get("updatedAt") else ""
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating deal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update deal: {str(e)}")
+
+@app.delete("/api/deals/{deal_id}")
+async def delete_deal(deal_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a deal"""
+    try:
+        email = current_user.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="User email not found in token")
+        
+        user_doc = users_collection.find_one({"email": email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        org_id = user_doc.get("orgId")
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        deal = deals_collection.find_one({"_id": ObjectId(deal_id), "orgId": org_id})
+        if not deal:
+            raise HTTPException(status_code=404, detail="Deal not found")
+        
+        deals_collection.delete_one({"_id": ObjectId(deal_id)})
+        
+        return {"message": "Deal deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting deal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete deal: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
