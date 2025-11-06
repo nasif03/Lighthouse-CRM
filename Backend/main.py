@@ -11,6 +11,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 import json
 import httpx
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -32,6 +33,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client.lighthousecrm
 users_collection = db.users
+organizations_collection = db.organizations
 
 # Firebase configuration
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "lighthousecrm-6caf2")
@@ -143,30 +145,86 @@ async def verify_token(request: VerifyTokenRequest):
         email = decoded_token.get("email")
         name = decoded_token.get("name", email.split("@")[0] if email else "User")
         picture = decoded_token.get("picture")
+        now = datetime.utcnow()
+        org_id: Optional[str] = None
+        existing_org = None
+        
+        # Resolve organization by email domain; create if missing (optimized - single query)
+        if email and "@" in email:
+            domain = email.split("@", 1)[1].lower()
+            existing_org = organizations_collection.find_one({"domain": domain})
+            if not existing_org:
+                org_doc = {
+                    "name": domain,
+                    "billingInfo": None,
+                    "domain": domain,
+                    "settings": None,
+                    "salesStages": [],
+                    "admins": [],
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                org_insert = organizations_collection.insert_one(org_doc)
+                org_id = str(org_insert.inserted_id)
+                # Store org data to avoid another query
+                existing_org = {"_id": org_insert.inserted_id, "admins": []}
+            else:
+                org_id = str(existing_org["_id"])
         
         # Check if user exists in database
         user_doc = users_collection.find_one({"email": email})
-        
+    
         if not user_doc:
-            # Create new user
+            # Determine if user should be admin (first user in org)
+            is_admin = False
+            if org_id and existing_org and (not existing_org.get("admins") or len(existing_org.get("admins", [])) == 0):
+                is_admin = True
+            
+            # Create new user according to database_struct.json
             user_data = {
-                "firebase_uid": uid,
                 "email": email,
                 "name": name,
+                "password": None,
                 "picture": picture,
+                "roleIds": [],
+                "orgId": org_id,
+                "isAdmin": is_admin,
+                "lastSeenAt": now,
+                "createdAt": now,
+                "firebaseUid": uid,
+                "updatedAt": now,
             }
-            result = users_collection.insert_one(user_data)
-            user_id = str(result.inserted_id)
+            insert_result = users_collection.insert_one(user_data)
+            user_id = str(insert_result.inserted_id)
+            
+            # Update org admins if this is the first admin (single update operation)
+            if is_admin and org_id:
+                organizations_collection.update_one(
+                    {"_id": ObjectId(org_id)}, 
+                    {"$set": {"updatedAt": now}, "$push": {"admins": user_id}}
+                )
         else:
-            # Update user info if needed
+            # Update user info if needed (optimized - single update)
             user_id = str(user_doc["_id"])
-            update_data = {}
+            update_data = {"updatedAt": now, "lastSeenAt": now}
+            has_changes = False
+            
+            # Only update fields that actually changed
             if user_doc.get("name") != name:
                 update_data["name"] = name
+                has_changes = True
             if user_doc.get("picture") != picture:
                 update_data["picture"] = picture
-            if update_data:
-                users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+                has_changes = True
+            if not user_doc.get("orgId") and org_id:
+                update_data["orgId"] = org_id
+                has_changes = True
+            if user_doc.get("firebaseUid") != uid:
+                update_data["firebaseUid"] = uid
+                has_changes = True
+            
+            # Always update lastSeenAt and updatedAt (even if no other changes)
+            users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
         
         # Return token and user info
         return TokenResponse(
