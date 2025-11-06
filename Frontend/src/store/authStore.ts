@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
-
-const API_BASE_URL = 'http://localhost:3000';
+import { apiPost } from '../utils/api';
 
 type User = { id: string; name: string; email: string; picture?: string; orgId?: string } | null;
 
@@ -47,19 +46,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const idToken = await result.user.getIdToken();
       
       // Verify token with backend and get user info
-      const response = await fetch(`${API_BASE_URL}/api/auth/verify-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id_token: idToken }),
-      });
+      const data = await apiPost<{ user: NonNullable<User>; token: string }>(
+        '/api/auth/verify-token',
+        null,
+        { id_token: idToken },
+        { skipCache: true }
+      );
       
-      if (!response.ok) {
-        throw new Error('Failed to verify token');
-      }
-      
-      const data = await response.json();
       get().login(data.user, data.token);
     } catch (error: any) {
       console.error('Sign in error:', error);
@@ -82,36 +75,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initializeAuth: () => {
     set({ isLoading: true });
     
-    // Check for stored token first
-    const storedToken = localStorage.getItem('auth_token');
-    if (storedToken) {
-      // Try to verify stored token
-      // For now, we'll rely on Firebase auth state
-    }
+    // Track last verification to avoid excessive API calls
+    let lastVerificationTime = 0;
+    const VERIFICATION_THROTTLE = 60000; // 1 minute
     
     // Listen for auth state changes
     onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         try {
+          const now = Date.now();
+          // Throttle token verification to avoid excessive API calls
+          if (now - lastVerificationTime < VERIFICATION_THROTTLE && get().user) {
+            set({ isLoading: false });
+            return;
+          }
+          
+          lastVerificationTime = now;
           const idToken = await firebaseUser.getIdToken();
           
           // Verify token with backend
-          const response = await fetch(`${API_BASE_URL}/api/auth/verify-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ id_token: idToken }),
-          });
+          const data = await apiPost<{ user: NonNullable<User>; token: string }>(
+            '/api/auth/verify-token',
+            null,
+            { id_token: idToken },
+            { skipCache: true }
+          );
           
-          if (response.ok) {
-            const data = await response.json();
-            get().login(data.user, data.token);
-          } else {
-            // Clear invalid token
-            localStorage.removeItem('auth_token');
-            set({ user: null, token: null, isLoading: false });
-          }
+          get().login(data.user, data.token);
         } catch (error) {
           console.error('Auth initialization error:', error);
           localStorage.removeItem('auth_token');

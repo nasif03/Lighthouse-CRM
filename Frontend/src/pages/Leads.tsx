@@ -3,10 +3,10 @@ import Input from '../components/ui/Input';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
-
-const API_BASE_URL = 'http://localhost:3000';
+import { apiGet, apiPost, clearCache } from '../utils/api';
+import { useDebounce } from '../hooks/useDebounce';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New' },
@@ -31,6 +31,7 @@ type Lead = {
 export default function Leads() {
   const { token } = useAuthStore();
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -49,7 +50,7 @@ export default function Leads() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     if (!token) {
       setIsLoading(false);
       return;
@@ -58,19 +59,7 @@ export default function Leads() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/leads`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch leads');
-      }
-
-      const data = await response.json();
+      const data = await apiGet<Lead[]>('/api/leads', token);
       setLeads(data);
     } catch (err: any) {
       console.error('Error fetching leads:', err);
@@ -78,18 +67,23 @@ export default function Leads() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
-  const filteredLeads = leads.filter(l => 
-    l.name.toLowerCase().includes(query.toLowerCase()) ||
-    l.email.toLowerCase().includes(query.toLowerCase())
-  );
+  // Memoize filtered leads to avoid unnecessary recalculations
+  const filteredLeads = useMemo(() => {
+    if (!debouncedQuery) return leads;
+    const lowerQuery = debouncedQuery.toLowerCase();
+    return leads.filter(l => 
+      l.name.toLowerCase().includes(lowerQuery) ||
+      l.email.toLowerCase().includes(lowerQuery)
+    );
+  }, [leads, debouncedQuery]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
@@ -101,37 +95,17 @@ export default function Leads() {
     }
 
     try {
-      console.log('Creating lead with data:', formData);
-      
-      const response = await fetch(`${API_BASE_URL}/api/leads`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          source: formData.source,
-          status: formData.status,
-        }),
+      await apiPost('/api/leads', token, {
+        name: formData.name,
+        email: formData.email,
+        source: formData.source,
+        status: formData.status,
       });
 
-      const responseData = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const errorMessage = responseData?.detail || responseData?.message || `HTTP ${response.status}: ${response.statusText}`;
-        console.error('Lead creation failed:', errorMessage);
-        throw new Error(errorMessage);
-      }
-
-      console.log('Lead created successfully:', responseData);
-
-      // Reset form and close modal
+      // Clear cache and refresh leads list
+      clearCache('/api/leads');
       setFormData({ name: '', email: '', source: '', status: 'new' });
       setIsModalOpen(false);
-      
-      // Refresh leads list
       await fetchLeads();
     } catch (error: any) {
       console.error('Error creating lead:', error);
@@ -141,7 +115,7 @@ export default function Leads() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [token, formData, fetchLeads]);
 
   const handleClose = () => {
     if (!isSubmitting) {
