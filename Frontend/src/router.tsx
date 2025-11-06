@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
@@ -12,28 +12,38 @@ import Support from './pages/Support';
 import Administration from './pages/Administration';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import ProtectedRoute from './components/ProtectedRoute';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AppLayout />,
+    element: <ProtectedRoute />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'leads', element: <Leads /> },
-      { path: 'contacts', element: <Contacts /> },
-      { path: 'deals', element: <Deals /> },
-      { path: 'campaigns', element: <Campaigns /> },
-      { path: 'segments', element: <Segments /> },
-      { path: 'templates', element: <Templates /> },
-      { path: 'analytics', element: <Analytics /> },
-      { path: 'support', element: <Support /> },
-      { path: 'administration', element: <Administration /> },
-      { path: 'settings', element: <Settings /> },
+      {
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <Dashboard /> },
+          { path: 'leads', element: <Leads /> },
+          { path: 'contacts', element: <Contacts /> },
+          { path: 'deals', element: <Deals /> },
+          { path: 'campaigns', element: <Campaigns /> },
+          { path: 'segments', element: <Segments /> },
+          { path: 'templates', element: <Templates /> },
+          { path: 'analytics', element: <Analytics /> },
+          { path: 'support', element: <Support /> },
+          { path: 'administration', element: <Administration /> },
+          { path: 'settings', element: <Settings /> },
+        ],
+      },
     ],
   },
   {
     path: '/login',
     element: <Login />
+  },
+  {
+    path: '*',
+    element: <Navigate to="/" replace />
   }
 ]);
 

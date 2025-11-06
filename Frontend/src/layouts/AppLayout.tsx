@@ -99,7 +99,10 @@ export default function AppLayout() {
               <span className="text-sm text-gray-600">{user.name}</span>
               <button
                 className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 text-sm"
-                onClick={() => { logout(); navigate('/login'); }}
+                onClick={async () => { 
+                  await logout(); 
+                  navigate('/login'); 
+                }}
               >
                 Logout
               </button>
