@@ -1,7 +1,7 @@
 1st terminal : 
 cd backend
 pip install -r requirements.txt
-python3 main.py
+python main.py
 
 
 2nd terminal : 

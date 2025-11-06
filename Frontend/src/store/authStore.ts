@@ -4,7 +4,7 @@ import { auth, googleProvider } from '../config/firebase';
 
 const API_BASE_URL = 'http://localhost:3000';
 
-type User = { id: string; name: string; email: string; picture?: string } | null;
+type User = { id: string; name: string; email: string; picture?: string; orgId?: string } | null;
 
 type AuthState = {
   user: User;
