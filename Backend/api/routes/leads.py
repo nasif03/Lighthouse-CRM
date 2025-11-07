@@ -289,25 +289,24 @@ async def convert_lead_to_deal(
         contact_id = str(contact_result.inserted_id)
         
         # Create Deal from lead
+        # Note: Don't include amount, probability, or closeDate if they're None to avoid validation errors
         deal_data = {
             "name": f"Deal: {lead.get('name', 'Untitled')}",
             "accountId": ObjectId(account_id),
             "contactId": ObjectId(contact_id),
-            "amount": None,
             "currency": "USD",
             "stageId": "prospecting",
             "stageName": "Prospecting",
-            "probability": None,
-            "closeDate": None,
             "status": "open",
             "ownerId": owner_id,
             "orgId": org_id,
             "tags": lead.get("tags", []),
             "lastActivityAt": now,
-            "metadata": None,
             "createdAt": now,
             "updatedAt": now,
         }
+        # Only add optional fields if they have values (to avoid MongoDB validation errors)
+        # These fields will be added later when the deal is updated
         deal_result = deals_collection.insert_one(deal_data)
         deal_id = str(deal_result.inserted_id)
         

@@ -14,6 +14,9 @@ const STATUS_OPTIONS = [
   { value: 'lost', label: 'Lost', color: 'bg-red-50 border-red-200' },
 ];
 
+// Kanban columns (excluding converted since it has a convert button)
+const KANBAN_STATUSES = STATUS_OPTIONS.filter(s => s.value !== 'converted');
+
 type Lead = {
   id: string;
   name: string;
@@ -88,7 +91,8 @@ export default function Leads() {
       setIsLoading(true);
       setError(null);
       const data = await apiGet<Lead[]>('/api/leads', token);
-      setLeads(data);
+      // Filter out converted leads - they appear in contacts page instead
+      setLeads(data.filter(lead => lead.status !== 'converted'));
     } catch (err: any) {
       if (err.message === 'Request cancelled') {
         return;
@@ -117,6 +121,7 @@ export default function Leads() {
   }, [leads, debouncedQuery]);
 
   const getLeadsByStatus = (status: string): Lead[] => {
+    // Filter leads by status (converted leads are already filtered out)
     return filteredLeads.filter(lead => lead.status === status);
   };
 
@@ -216,16 +221,14 @@ export default function Leads() {
     setError(null);
 
     try {
-      const result = await apiPost<{ message: string; leadId: string; accountId: string; contactId: string; dealId: string }>(
+      await apiPost(
         `/api/leads/${leadId}/convert`,
         token
       );
 
-      // Update the lead status to converted
+      // Remove the converted lead from the leads list (it will appear in contacts)
       setLeads(prevLeads =>
-        prevLeads.map(lead =>
-          lead.id === leadId ? { ...lead, status: 'converted' } : lead
-        )
+        prevLeads.filter(lead => lead.id !== leadId)
       );
 
       clearCache('/api/leads');
@@ -280,25 +283,25 @@ export default function Leads() {
         </div>
       )}
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {STATUS_OPTIONS.map(statusOption => {
+      <div className="flex gap-4 pb-4">
+        {KANBAN_STATUSES.map(statusOption => {
           const statusLeads = getLeadsByStatus(statusOption.value);
           return (
             <div
               key={statusOption.value}
-              className={`flex-shrink-0 w-80 rounded-lg border-2 p-4 ${statusOption.color}`}
+              className={`flex-1 min-w-0 rounded-lg border-2 p-4 ${statusOption.color}`}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, statusOption.value)}
             >
-              <div className="font-semibold mb-3 text-gray-900 flex items-center justify-between">
+              <div className="font-semibold mb-4 text-lg text-gray-900 flex items-center justify-between">
                 <span>{statusOption.label}</span>
-                <span className="text-sm font-normal text-gray-600 bg-white px-2 py-1 rounded">
+                <span className="text-base font-normal text-gray-600 bg-white px-2.5 py-1 rounded">
                   {statusLeads.length}
                 </span>
               </div>
-              <div className="flex flex-col gap-2 min-h-[200px]">
+              <div className="flex flex-col gap-3 min-h-[200px]">
                 {statusLeads.length === 0 ? (
-                  <div className="text-center text-gray-400 text-sm py-8">
+                  <div className="text-center text-gray-400 text-xs py-6">
                     No leads
                   </div>
                 ) : (
@@ -309,46 +312,46 @@ export default function Leads() {
                       onDragStart={(e) => handleDragStart(e, lead)}
                       className="bg-white rounded-lg border border-gray-200 p-3 cursor-move hover:shadow-md transition-shadow"
                     >
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                      <div className="flex items-start gap-2.5 mb-2.5">
+                        <div className="w-9 h-9 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-semibold flex-shrink-0">
                           {getInitials(lead.name)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-gray-900 truncate">
+                          <div className="font-medium text-base text-gray-900 truncate">
                             {lead.name}
                           </div>
-                          <div className="text-xs text-gray-500 truncate">
+                          <div className="text-sm text-gray-500 truncate">
                             {lead.email}
                           </div>
                         </div>
                       </div>
 
                       {lead.phone && (
-                        <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                        <div className="text-sm text-gray-600 mb-2 flex items-center gap-1.5">
                           <span>📞</span>
-                          <span>{lead.phone}</span>
+                          <span className="truncate">{lead.phone}</span>
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
+                      <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                        <span className="text-sm px-2.5 py-1 bg-gray-100 text-gray-700 rounded">
                           {lead.source}
                         </span>
                         {lead.tags && lead.tags.length > 0 && (
-                          <div className="flex gap-1 flex-wrap">
+                          <div className="flex gap-1.5">
                             {lead.tags.slice(0, 2).map((tag, idx) => (
-                              <span key={idx} className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                              <span key={idx} className="text-sm px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
                                 {tag}
                               </span>
                             ))}
                             {lead.tags.length > 2 && (
-                              <span className="text-xs text-gray-500">+{lead.tags.length - 2}</span>
+                              <span className="text-sm text-gray-500">+{lead.tags.length - 2}</span>
                             )}
                           </div>
                         )}
                       </div>
 
-                      <div className="text-xs text-gray-400 mb-2">
+                      <div className="text-sm text-gray-400 mb-2.5">
                         {formatRelativeTime(lead.createdAt)}
                       </div>
 
@@ -356,14 +359,14 @@ export default function Leads() {
                         <button
                           onClick={() => handleConvert(lead.id)}
                           disabled={convertingLeadId === lead.id}
-                          className="w-full mt-2 px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="w-full mt-2 px-3 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {convertingLeadId === lead.id ? 'Converting...' : 'Convert'}
                         </button>
                       )}
 
                       {lead.status === 'converted' && (
-                        <div className="w-full mt-2 px-3 py-1.5 text-xs font-medium text-center text-purple-700 bg-purple-100 rounded">
+                        <div className="w-full mt-2 px-3 py-2 text-sm font-medium text-center text-purple-700 bg-purple-100 rounded">
                           ✓ Converted
                         </div>
                       )}

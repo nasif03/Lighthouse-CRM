@@ -56,30 +56,32 @@ export default function AppLayout() {
   const title = allNavItems.find(n => n.to === pathname)?.label || 'Overview';
 
   return (
-    <div className="h-full grid grid-cols-[280px_1fr_420px] grid-rows-[56px_1fr] bg-gray-50">
-      <aside className="row-span-2 bg-white border-r border-gray-200 p-3">
-        <div className="flex items-center gap-2 px-2 py-3">
-          <img src="/lighthouse_logo.png" alt="Lighthouse CRM" className="size-8 object-contain" />
-          <div className="text-lg font-semibold">Lighthouse CRM</div>
+    <div className="h-full grid grid-cols-[250px_1fr_350px] grid-rows-[57px_1fr] bg-gray-50">
+      <aside className="row-span-2 bg-gradient-to-b from-white to-gray-50 border-r border-gray-200 shadow-sm">
+        <div className="flex items-center gap-2 px-3 h-[56px] border-b border-gray-200">
+          <img src="/lighthouse_logo.png" alt="Lighthouse CRM" className="size-7 object-contain" />
+          <div className="text-base font-bold text-gray-900">Lighthouse</div>
         </div>
-        <nav className="mt-4 flex flex-col gap-6">
+        <nav className="p-2 flex flex-col gap-4 mt-2">
           {navSections.map((section) => (
             <div key={section.label}>
-              <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 {section.label}
               </div>
-              <div className="flex flex-col gap-1 mt-1">
+              <div className="flex flex-col gap-0.5 mt-1">
                 {section.items.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
                     end={item.to === '/'}
                     className={({ isActive }) => clsx(
-                      'px-3 py-2 rounded-md text-sm flex items-center gap-2',
-                      isActive ? 'bg-brand-50 text-brand-700 border-l-2 border-brand-600' : 'text-gray-700 hover:bg-gray-50'
+                      'px-3 py-2.5 rounded-lg text-sm flex items-center gap-2.5 transition-all duration-200',
+                      isActive 
+                        ? 'bg-brand-500 text-white shadow-md shadow-brand-500/20 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     )}
                   >
-                    <item.icon className="w-4 h-4" />
+                    <item.icon className="w-4 h-4 flex-shrink-0 transition-colors [&>path]:fill-current" />
                     <span>{item.label}</span>
                   </NavLink>
                 ))}
@@ -89,7 +91,7 @@ export default function AppLayout() {
         </nav>
       </aside>
 
-      <header className="col-start-2 col-span-2 h-14 border-b border-gray-200 bg-white flex items-center gap-3 px-4">
+      <header className="col-start-2 col-span-2 h-[56px] border-b border-gray-200 bg-white flex items-center gap-3 px-4">
         <div className="text-lg font-semibold tracking-tight w-48 min-w-48 truncate">{title}</div>
         <div className="mx-3 h-6 w-px bg-gray-200" />
         <TenantSwitcher />

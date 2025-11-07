@@ -620,5 +620,349 @@ Multi-Tenant Enhancements:
 5. Implement data export per tenant
 
 ================================================================================
+RECENT CHANGES & IMPROVEMENTS (Session Updates)
+================================================================================
+
+DATE: Current Session
+--------------------
+
+1. FIXED: MongoDB Validation Error for Activities
+   File: Backend/services/activity_log.py
+   Issue: recordingUrl and externalId were set to None, but MongoDB schema requires strings
+   Fix: Changed None to empty strings ("") for both fields
+   Impact: Lead creation no longer throws validation errors
+
+2. IMPLEMENTED: Data Isolation for Leads (User & Tenant Level)
+   Files: 
+   - Backend/utils/query_filters.py (NEW)
+   - Backend/utils/__init__.py (UPDATED)
+   - Backend/api/routes/leads.py (UPDATED)
+   
+   Changes:
+   - Created reusable query filter utilities for data isolation
+   - build_user_filter(): Builds MongoDB filters with orgId and ownerId
+   - build_user_filter_with_conditions(): Combines user filters with custom conditions
+   - get_user_ids(): Extracts ownerId and orgId from user document
+   - Updated GET /api/leads to filter by both orgId (tenant) and ownerId (user)
+   - Updated POST /api/leads/{id}/convert to ensure users can only convert their own leads
+   
+   Features:
+   - Tenant isolation: Users only see data from their current organization
+   - User isolation: Users only see their own leads
+   - Multi-tenant support: Users with multiple tenants see data only for active tenant
+   - Modular design: Utilities can be reused for other entities (deals, contacts, accounts)
+
+3. ENHANCED: Leads Page - Status Editing
+   Files: 
+   - Backend/models/lead.py (UPDATED)
+   - Backend/api/routes/leads.py (UPDATED)
+   - Frontend/src/utils/api.ts (UPDATED)
+   - Frontend/src/pages/Leads.tsx (UPDATED)
+   
+   Changes:
+   - Added UpdateLeadStatusRequest model
+   - Created PATCH /api/leads/{lead_id}/status endpoint
+   - Added apiPatch method to API utility
+   - Replaced static status display with editable dropdown in table
+   - Added handleStatusChange function with loading states
+   - Real-time status updates with optimistic UI updates
+
+4. TRANSFORMED: Leads Page to Kanban Style
+   Files:
+   - Backend/models/lead.py (UPDATED)
+   - Backend/api/routes/leads.py (UPDATED)
+   - Frontend/src/pages/Leads.tsx (COMPLETELY REWRITTEN)
+   
+   Changes:
+   - Updated LeadResponse model to include: phone, firstName, lastName, tags
+   - Updated GET endpoint to return all lead fields
+   - Converted table view to Kanban board layout
+   - Created 4 status columns: New, Contacted, Qualified, Lost (excluded Converted)
+   - Color-coded columns (blue, yellow, green, red)
+   - Implemented drag-and-drop functionality between status columns
+   - Enhanced lead cards with:
+     * Avatar with initials
+     * Name, email, phone (if available)
+     * Source badge
+     * Tags (up to 2 displayed)
+     * Relative time display
+     * Convert button (for non-converted leads)
+   - Added search functionality with debouncing
+   - Improved UI with hover effects, transitions, and better spacing
+   - Made columns use flex-1 to fill available space
+
+5. IMPLEMENTED: Lead Conversion Functionality
+   Files:
+   - Frontend/src/pages/Leads.tsx (UPDATED)
+   
+   Changes:
+   - Added Convert button on each lead card
+   - Implemented handleConvert function
+   - Calls POST /api/leads/{id}/convert endpoint
+   - Removes converted lead from leads page (appears in contacts instead)
+   - Shows loading state during conversion
+   - Displays success/error messages
+
+6. FIXED: Deal Creation Validation Error
+   Files:
+   - Backend/api/routes/leads.py (UPDATED)
+   
+   Issue: MongoDB validation error when creating deals (amount, probability, closeDate as None)
+   Fix: Removed None values for optional fields (amount, probability, closeDate) from deal_data
+   Impact: Lead conversion now works without validation errors
+
+7. UPDATED: .gitignore File
+   File: .gitignore (COMPREHENSIVELY UPDATED)
+   
+   Added:
+   - Python: __pycache__/, *.pyc, venv/, *.egg-info/, etc.
+   - Node.js: node_modules/, dist/, build/, .vite/, *.log
+   - Environment: .env*, *.json.key
+   - IDE: .vscode/, .idea/, *.swp, *.sublime-*
+   - OS: .DS_Store, Thumbs.db, Desktop.ini
+   - Build artifacts, logs, cache files
+   Note: Android folder NOT ignored (as per user requirement - another developer works on it)
+
+8. IMPROVED: Navigation & Layout Aesthetics
+   Files:
+   - Frontend/src/layouts/AppLayout.tsx (UPDATED)
+   
+   Changes:
+   - Reduced sidebar width from 280px to 250px (user changed to 250px)
+   - Improved navigation styling:
+     * Gradient background (from-white to-gray-50)
+     * Better active state (brand-500 background, white text, shadow)
+     * Improved hover states with smooth transitions
+     * Better spacing and typography
+     * Icons inherit text color (white when active, gray when inactive)
+   - Fixed header alignment: Both sidebar header and main header set to h-[56px]
+   - Grid row set to 57px (56px + 1px border) for perfect alignment
+   - Header spans over inbox (col-span-2)
+
+9. REDUCED: Inbox Sidebar Size
+   Files:
+   - Frontend/src/layouts/AppLayout.tsx (UPDATED)
+   
+   Changes:
+   - Reduced inbox width from 400px to 350px
+   - More space available for main content area
+
+10. TRANSFORMED: Deals Page to Match Leads Style
+    Files:
+    - Frontend/src/pages/Deals.tsx (COMPLETELY REWRITTEN)
+    
+    Changes:
+    - Converted to Kanban board layout matching Leads page
+    - Color-coded stage columns:
+      * Prospecting (blue)
+      * Qualification (yellow)
+      * Proposal (green)
+      * Negotiation (orange)
+      * Closed Won (purple)
+      * Closed Lost (red)
+    - Enhanced deal cards with:
+      * Avatar with initials
+      * Deal name and amount
+      * Account name (with icon)
+      * Probability percentage
+      * Close date (if available)
+      * Tags (up to 1 displayed)
+      * Relative time display
+      * Edit and Delete buttons
+    - Added search functionality with debouncing
+    - Improved drag-and-drop with loading states
+    - Made columns use flex-1 to fill available space
+    - Updated to use centralized API utilities (apiGet, apiPut, apiDelete)
+    - Reduced font sizes and spacing for better information density
+    - Compact card design with smaller fonts (text-sm, text-xs)
+
+11. IMPROVED: Font Sizes & Visual Aesthetics
+    Files:
+    - Frontend/src/pages/Leads.tsx (UPDATED)
+    - Frontend/src/pages/Deals.tsx (UPDATED)
+    
+    Changes:
+    - Increased font sizes in Leads page for better readability:
+      * Lead name: text-base
+      * Email: text-sm
+      * Column headers: text-lg
+    - Reduced font sizes in Deals page for better information density:
+      * Deal name: text-sm
+      * Details: text-xs
+      * Column headers: text-base
+    - Improved spacing and padding throughout
+    - Better visual hierarchy
+
+12. IMPLEMENTED: Lead Conversion Workflow
+    Files:
+    - Frontend/src/pages/Leads.tsx (UPDATED)
+    
+    Changes:
+    - Converted leads are removed from leads page
+    - Converted leads appear in Contacts page (created by convert endpoint)
+    - Lead remains in database with status="converted"
+    - Filter out converted leads when fetching leads list
+    - Immediate UI update on conversion (removes from list)
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+New Utility Module: Backend/utils/query_filters.py
+---------------------------------------------------
+Purpose: Reusable query filter utilities for data isolation
+
+Functions:
+1. build_user_filter(user_doc, include_owner=True)
+   - Returns MongoDB filter with orgId and ownerId
+   - include_owner: If False, only filters by orgId (for admin views)
+
+2. build_user_filter_with_conditions(user_doc, additional_conditions, include_owner=True)
+   - Combines user isolation filters with custom conditions
+   - Useful for complex queries
+
+3. get_user_ids(user_doc)
+   - Returns dict with ownerId and orgId
+   - Validates that user belongs to an organization
+
+Usage Example:
+```python
+from utils.query_filters import build_user_filter
+
+query_filter = build_user_filter(user_doc, include_owner=True)
+leads = leads_collection.find(query_filter)
+```
+
+API Endpoints Added/Modified:
+------------------------------
+1. PATCH /api/leads/{lead_id}/status
+   - Updates lead status
+   - Returns updated LeadResponse with all fields
+   - Validates status values
+   - Ensures user can only update their own leads
+
+2. POST /api/leads/{lead_id}/convert
+   - Creates Account, Contact, and Deal from lead
+   - Updates lead status to "converted"
+   - Fixed: Removed None values for optional deal fields to avoid validation errors
+
+Frontend API Utilities:
+-----------------------
+1. apiPatch<T>(endpoint, token, data, options)
+   - PATCH request with authentication
+   - Supports request caching and cancellation
+
+UI Components Enhanced:
+----------------------
+1. Leads Page:
+   - Kanban board with drag-and-drop
+   - Search with debouncing
+   - Convert button on each card
+   - Real-time status updates
+   - Responsive column layout
+
+2. Deals Page:
+   - Kanban board matching Leads style
+   - Search functionality
+   - Enhanced deal cards
+   - Drag-and-drop between stages
+   - Edit and Delete actions
+
+3. Navigation:
+   - Improved visual design
+   - Better active states
+   - Smooth transitions
+   - Gradient backgrounds
+
+================================================================================
+DATA ISOLATION IMPLEMENTATION
+================================================================================
+
+Pattern: Multi-Level Data Isolation
+-----------------------------------
+1. Tenant Level (orgId):
+   - Users can only access data from their current organization
+   - Prevents cross-tenant data leakage
+   - Essential for multi-tenant architecture
+
+2. User Level (ownerId):
+   - Users can only see their own leads/deals
+   - Provides personal data isolation
+   - Can be toggled for admin/manager views (include_owner=False)
+
+Implementation:
+- All queries use build_user_filter() utility
+- Consistent pattern across all entities
+- Easy to extend to other entities (deals, contacts, accounts)
+- Maintainable and reusable
+
+Example Query Pattern:
+```python
+# Get user's own leads in their organization
+query_filter = build_user_filter(user_doc, include_owner=True)
+leads = collection.find(query_filter)
+
+# Get all leads in organization (admin view)
+query_filter = build_user_filter(user_doc, include_owner=False)
+all_leads = collection.find(query_filter)
+```
+
+================================================================================
+UI/UX IMPROVEMENTS
+================================================================================
+
+Kanban Board Design:
+-------------------
+- Column-based layout for visual workflow
+- Drag-and-drop for easy status/stage changes
+- Color coding for quick visual identification
+- Real-time updates on changes
+- Empty states for better UX
+- Responsive design (horizontal scroll if needed)
+
+Card Design:
+-----------
+- Avatar with initials for visual identification
+- Key information at a glance
+- Tags and badges for categorization
+- Relative time for recency
+- Action buttons for quick operations
+- Hover effects for interactivity
+
+Typography:
+----------
+- Larger fonts for better readability (Leads)
+- Compact fonts for information density (Deals)
+- Consistent sizing across components
+- Proper hierarchy (headers, body, metadata)
+
+Spacing:
+-------
+- Improved padding and margins
+- Better gap between cards
+- Consistent spacing throughout
+- Reduced congestion in Deals page
+
+================================================================================
+FILES MODIFIED/CREATED IN THIS SESSION
+================================================================================
+
+Backend:
+--------
+1. Backend/services/activity_log.py - Fixed validation error
+2. Backend/utils/query_filters.py - NEW: Query filter utilities
+3. Backend/utils/__init__.py - Added exports for query filters
+4. Backend/api/routes/leads.py - Added status update, improved data isolation
+5. Backend/models/lead.py - Added UpdateLeadStatusRequest, enhanced LeadResponse
+
+Frontend:
+---------
+1. Frontend/src/pages/Leads.tsx - Complete rewrite (Kanban style)
+2. Frontend/src/pages/Deals.tsx - Complete rewrite (Kanban style matching Leads)
+3. Frontend/src/utils/api.ts - Added apiPatch method
+4. Frontend/src/layouts/AppLayout.tsx - Improved navigation, fixed alignment
+5. .gitignore - Comprehensive update
+
+================================================================================
 END OF SUMMARY
 ================================================================================
