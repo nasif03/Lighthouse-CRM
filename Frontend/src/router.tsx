@@ -9,6 +9,8 @@ import Segments from './pages/Segments';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
 import Support from './pages/Support';
+import CreateTicket from './pages/CreateTicket';
+import TicketDetail from './pages/TicketDetail';
 import Administration from './pages/Administration';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -32,6 +34,8 @@ export const router = createBrowserRouter([
           { path: 'templates', element: <Templates /> },
           { path: 'analytics', element: <Analytics /> },
           { path: 'support', element: <Support /> },
+          { path: 'support/create', element: <CreateTicket /> },
+          { path: 'support/:id', element: <TicketDetail /> },
           { path: 'administration', element: <Administration /> },
           { path: 'settings', element: <Settings /> },
         ],
