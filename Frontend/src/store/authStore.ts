@@ -26,6 +26,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (token) {
       localStorage.setItem('auth_token', token);
     }
+    // Fetch tenants after login
+    if (token && typeof window !== 'undefined') {
+      import('./tenantStore').then(({ useTenantStore }) => {
+        useTenantStore.getState().fetchTenants();
+      });
+    }
   },
   
   logout: async () => {

@@ -2,9 +2,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
+import time
 from models.account import AccountResponse, CreateAccountRequest, UpdateAccountRequest
 from api.dependencies import get_current_user
 from config.database import accounts_collection, contacts_collection, deals_collection
+from services.activity_log import log_account_created
+from utils.performance import time_operation, time_database_query
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -15,6 +18,7 @@ async def get_accounts(
     current_user: dict = Depends(get_current_user)
 ):
     """Get accounts for the current user's organization with pagination"""
+    endpoint_start = time.perf_counter()
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -24,27 +28,54 @@ async def get_accounts(
         if not org_id:
             raise HTTPException(status_code=400, detail="User must belong to an organization")
         
-        cursor = accounts_collection.find(
-            {"orgId": org_id, "deleted": {"$ne": True}},
-            {"name": 1, "domain": 1, "industry": 1, "phone": 1, "status": 1, "ownerId": 1, "orgId": 1, "createdAt": 1, "updatedAt": 1}
-        ).sort("createdAt", -1).skip(skip).limit(limit)
-        accounts = list(cursor)
+        # Optimize query: filter by orgId and deleted status, sort by createdAt
+        # Query structure matches the compound index (orgId, deleted, createdAt)
+        # Use $in to efficiently match False or missing deleted field
+        query = {
+            "orgId": org_id,
+            "deleted": {"$ne": True}  # Matches False, None, or missing
+        }
         
-        return [
-            AccountResponse(
-                id=str(account["_id"]),
-                name=account.get("name", ""),
-                domain=account.get("domain"),
-                industry=account.get("industry"),
-                phone=account.get("phone"),
-                status=account.get("status"),
-                ownerId=account.get("ownerId", ""),
-                orgId=account.get("orgId", ""),
-                createdAt=account.get("createdAt").isoformat() if account.get("createdAt") else "",
-                updatedAt=account.get("updatedAt").isoformat() if account.get("updatedAt") else ""
-            )
-            for account in accounts
-        ]
+        # Use projection to only fetch needed fields (reduces data transfer)
+        projection = {
+            "name": 1, 
+            "domain": 1, 
+            "industry": 1, 
+            "phone": 1, 
+            "status": 1, 
+            "ownerId": 1, 
+            "orgId": 1, 
+            "createdAt": 1, 
+            "updatedAt": 1
+        }
+        
+        # Execute query with sort, skip, and limit
+        # The compound index (orgId, deleted, createdAt) will be used for this query
+        with time_database_query("accounts", "find"):
+            cursor = accounts_collection.find(query, projection).sort("createdAt", -1).skip(skip).limit(limit)
+            accounts = list(cursor)
+        
+        with time_operation("Accounts: Transform response", threshold_ms=50.0):
+            result = [
+                AccountResponse(
+                    id=str(account["_id"]),
+                    name=account.get("name", ""),
+                    domain=account.get("domain"),
+                    industry=account.get("industry"),
+                    phone=account.get("phone"),
+                    status=account.get("status"),
+                    ownerId=account.get("ownerId", ""),
+                    orgId=account.get("orgId", ""),
+                    createdAt=account.get("createdAt").isoformat() if account.get("createdAt") else "",
+                    updatedAt=account.get("updatedAt").isoformat() if account.get("updatedAt") else ""
+                )
+                for account in accounts
+            ]
+        
+        endpoint_elapsed = (time.perf_counter() - endpoint_start) * 1000
+        print(f"✅ [GET /api/accounts] Total: {endpoint_elapsed:.2f}ms, returned {len(result)} accounts")
+        return result
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -83,6 +114,9 @@ async def create_account(request: CreateAccountRequest, current_user: dict = Dep
         
         result = accounts_collection.insert_one(account_data)
         account_id = str(result.inserted_id)
+        
+        # Log activity
+        log_account_created(org_id, owner_id, account_id, request.name)
         
         return AccountResponse(
             id=account_id,

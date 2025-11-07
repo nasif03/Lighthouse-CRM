@@ -1,7 +1,7 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 
 const API_BASE_URL = 'http://localhost:3000';
@@ -71,15 +71,7 @@ export default function Deals() {
   const [error, setError] = useState<string | null>(null);
   const [stages, setStages] = useState(DEFAULT_STAGES);
 
-  useEffect(() => {
-    if (token) {
-      fetchDeals();
-      fetchAccounts();
-      fetchContacts();
-    }
-  }, [token]);
-
-  const fetchDeals = async () => {
+  const fetchDeals = useCallback(async () => {
     if (!token) {
       setIsLoading(false);
       return;
@@ -108,9 +100,9 @@ export default function Deals() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -126,9 +118,9 @@ export default function Deals() {
     } catch (err) {
       console.error('Error fetching accounts:', err);
     }
-  };
+  }, [token]);
 
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -144,7 +136,15 @@ export default function Deals() {
     } catch (err) {
       console.error('Error fetching contacts:', err);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchDeals();
+      fetchAccounts();
+      fetchContacts();
+    }
+  }, [token, fetchDeals, fetchAccounts, fetchContacts]);
 
   const getDealsByStage = (stageId: string) => {
     return deals.filter(d => (d.stageId || 'prospecting') === stageId);

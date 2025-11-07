@@ -3,7 +3,7 @@ import Input from '../components/ui/Input';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 
@@ -62,16 +62,7 @@ export default function Accounts() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (token) {
-      fetchAccounts();
-      if (accountIdParam) {
-        fetchAccountDetails(accountIdParam);
-      }
-    }
-  }, [token, accountIdParam]);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     if (!token) {
       setIsLoading(false);
       return;
@@ -107,9 +98,9 @@ export default function Accounts() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token, accountIdParam]);
 
-  const fetchAccountDetails = async (accountId: string) => {
+  const fetchAccountDetails = useCallback(async (accountId: string) => {
     if (!token) return;
 
     try {
@@ -149,7 +140,16 @@ export default function Accounts() {
     } catch (err) {
       console.error('Error fetching account details:', err);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchAccounts();
+      if (accountIdParam) {
+        fetchAccountDetails(accountIdParam);
+      }
+    }
+  }, [token, accountIdParam, fetchAccounts, fetchAccountDetails]);
 
   const filteredAccounts = accounts.filter(a => 
     a.name.toLowerCase().includes(query.toLowerCase()) ||

@@ -3,7 +3,7 @@ import Input from '../components/ui/Input';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiGet, apiPost, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
@@ -43,12 +43,7 @@ export default function Leads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Fetch leads on component mount and when token changes
-  useEffect(() => {
-    fetchLeads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  const fetchingRef = useRef(false);
 
   const fetchLeads = useCallback(async () => {
     if (!token) {
@@ -56,18 +51,35 @@ export default function Leads() {
       return;
     }
 
+    // Prevent duplicate concurrent calls
+    if (fetchingRef.current) {
+      return;
+    }
+
+    fetchingRef.current = true;
+
     try {
       setIsLoading(true);
       setError(null);
       const data = await apiGet<Lead[]>('/api/leads', token);
       setLeads(data);
     } catch (err: any) {
+      // Ignore cancellation errors (handled by api utility)
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching leads:', err);
       setError(err.message || 'Failed to load leads');
     } finally {
       setIsLoading(false);
+      fetchingRef.current = false;
     }
   }, [token]);
+
+  // Fetch leads on component mount and when token changes
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
 
   // Memoize filtered leads to avoid unnecessary recalculations
   const filteredLeads = useMemo(() => {

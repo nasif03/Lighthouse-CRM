@@ -2,9 +2,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
+import time
 from models.contact import ContactResponse, CreateContactRequest, UpdateContactRequest
 from api.dependencies import get_current_user
 from config.database import contacts_collection
+from services.activity_log import log_contact_created
+from utils.performance import time_operation, time_database_query
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -15,6 +18,7 @@ async def get_contacts(
     current_user: dict = Depends(get_current_user)
 ):
     """Get contacts for the current user's organization with pagination"""
+    endpoint_start = time.perf_counter()
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -24,29 +28,35 @@ async def get_contacts(
         if not org_id:
             raise HTTPException(status_code=400, detail="User must belong to an organization")
         
-        cursor = contacts_collection.find(
-            {"orgId": org_id, "deleted": {"$ne": True}},
-            {"firstName": 1, "lastName": 1, "email": 1, "phone": 1, "title": 1, "accountId": 1, "ownerId": 1, "orgId": 1, "tags": 1, "createdAt": 1, "updatedAt": 1}
-        ).sort("createdAt", -1).skip(skip).limit(limit)
-        contacts = list(cursor)
+        with time_database_query("contacts", "find"):
+            cursor = contacts_collection.find(
+                {"orgId": org_id, "deleted": {"$ne": True}},
+                {"firstName": 1, "lastName": 1, "email": 1, "phone": 1, "title": 1, "accountId": 1, "ownerId": 1, "orgId": 1, "tags": 1, "createdAt": 1, "updatedAt": 1}
+            ).sort("createdAt", -1).skip(skip).limit(limit)
+            contacts = list(cursor)
         
-        return [
-            ContactResponse(
-                id=str(contact["_id"]),
-                firstName=contact.get("firstName", ""),
-                lastName=contact.get("lastName"),
-                email=contact.get("email", ""),
-                phone=contact.get("phone"),
-                title=contact.get("title"),
-                accountId=str(contact["accountId"]) if contact.get("accountId") else None,
-                ownerId=contact.get("ownerId", ""),
-                orgId=contact.get("orgId", ""),
-                tags=contact.get("tags", []),
-                createdAt=contact.get("createdAt").isoformat() if contact.get("createdAt") else "",
-                updatedAt=contact.get("updatedAt").isoformat() if contact.get("updatedAt") else ""
-            )
-            for contact in contacts
-        ]
+        with time_operation("Contacts: Transform response", threshold_ms=50.0):
+            result = [
+                ContactResponse(
+                    id=str(contact["_id"]),
+                    firstName=contact.get("firstName", ""),
+                    lastName=contact.get("lastName"),
+                    email=contact.get("email", ""),
+                    phone=contact.get("phone"),
+                    title=contact.get("title"),
+                    accountId=str(contact["accountId"]) if contact.get("accountId") else None,
+                    ownerId=contact.get("ownerId", ""),
+                    orgId=contact.get("orgId", ""),
+                    tags=contact.get("tags", []),
+                    createdAt=contact.get("createdAt").isoformat() if contact.get("createdAt") else "",
+                    updatedAt=contact.get("updatedAt").isoformat() if contact.get("updatedAt") else ""
+                )
+                for contact in contacts
+            ]
+        
+        endpoint_elapsed = (time.perf_counter() - endpoint_start) * 1000
+        print(f"✅ [GET /api/contacts] Total: {endpoint_elapsed:.2f}ms, returned {len(result)} contacts")
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -86,6 +96,10 @@ async def create_contact(request: CreateContactRequest, current_user: dict = Dep
         
         result = contacts_collection.insert_one(contact_data)
         contact_id = str(result.inserted_id)
+        
+        # Log activity
+        contact_name = f"{request.firstName} {request.lastName}".strip() or request.email
+        log_contact_created(org_id, owner_id, contact_id, contact_name)
         
         return ContactResponse(
             id=contact_id,
