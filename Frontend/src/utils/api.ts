@@ -137,6 +137,26 @@ export async function apiPut<T>(
 }
 
 /**
+ * PATCH request with authentication
+ */
+export async function apiPatch<T>(
+  endpoint: string,
+  token: string | null,
+  data?: any,
+  options: RequestOptions = {}
+): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    ...options,
+    method: 'PATCH',
+    headers: {
+      ...options.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
+/**
  * DELETE request with authentication
  */
 export async function apiDelete<T>(

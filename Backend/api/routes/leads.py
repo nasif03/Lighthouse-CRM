@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 import time
 from bson import ObjectId
-from models.lead import LeadResponse, CreateLeadRequest
+from models.lead import LeadResponse, CreateLeadRequest, UpdateLeadStatusRequest
 from api.dependencies import get_current_user
 from config.database import leads_collection, accounts_collection, contacts_collection, deals_collection
 from services.activity_log import log_lead_created, log_lead_converted
@@ -108,7 +108,9 @@ async def get_leads(
             with time_database_query("leads", "find"):
                 cursor = leads_collection.find(
                     query_filter,
-                    {"name": 1, "email": 1, "source": 1, "status": 1, "ownerId": 1, "orgId": 1, "createdAt": 1, "updatedAt": 1}
+                    {"name": 1, "email": 1, "source": 1, "status": 1, "phone": 1, 
+                     "firstName": 1, "lastName": 1, "tags": 1, "ownerId": 1, 
+                     "orgId": 1, "createdAt": 1, "updatedAt": 1}
                 ).sort("createdAt", -1).skip(skip).limit(limit)
                 leads = list(cursor)
         except Exception as db_error:
@@ -123,6 +125,10 @@ async def get_leads(
                     email=lead.get("email", ""),
                     source=lead.get("source", ""),
                     status=lead.get("status", "new"),
+                    phone=lead.get("phone"),
+                    firstName=lead.get("firstName"),
+                    lastName=lead.get("lastName"),
+                    tags=lead.get("tags", []),
                     ownerId=lead.get("ownerId", ""),
                     orgId=lead.get("orgId", ""),
                     createdAt=lead.get("createdAt").isoformat() if lead.get("createdAt") else "",
@@ -141,6 +147,79 @@ async def get_leads(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch leads: {str(e)}")
+
+@router.patch("/{lead_id}/status", response_model=LeadResponse)
+async def update_lead_status(
+    lead_id: str,
+    request: UpdateLeadStatusRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update lead status - only for the current user's leads"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Build filter to ensure user can only update their own leads
+        query_filter = build_user_filter(user_doc, include_owner=True)
+        query_filter["_id"] = ObjectId(lead_id)
+        
+        # Fetch the lead - only if it belongs to the current user
+        lead = leads_collection.find_one(query_filter)
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Validate status value
+        valid_statuses = ["new", "contacted", "qualified", "converted", "lost"]
+        if request.status not in valid_statuses:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        now = datetime.utcnow()
+        
+        # Update the lead status
+        update_result = leads_collection.update_one(
+            query_filter,
+            {
+                "$set": {
+                    "status": request.status,
+                    "updatedAt": now
+                }
+            }
+        )
+        
+        if update_result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Fetch updated lead
+        updated_lead = leads_collection.find_one(query_filter)
+        if not updated_lead:
+            raise HTTPException(status_code=500, detail="Failed to fetch updated lead")
+        
+        return LeadResponse(
+            id=str(updated_lead["_id"]),
+            name=updated_lead.get("name", ""),
+            email=updated_lead.get("email", ""),
+            source=updated_lead.get("source", ""),
+            status=updated_lead.get("status", "new"),
+            phone=updated_lead.get("phone"),
+            firstName=updated_lead.get("firstName"),
+            lastName=updated_lead.get("lastName"),
+            tags=updated_lead.get("tags", []),
+            ownerId=updated_lead.get("ownerId", ""),
+            orgId=updated_lead.get("orgId", ""),
+            createdAt=updated_lead.get("createdAt").isoformat() if updated_lead.get("createdAt") else "",
+            updatedAt=updated_lead.get("updatedAt").isoformat() if updated_lead.get("updatedAt") else ""
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating lead status: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update lead status: {str(e)}")
 
 @router.post("/{lead_id}/convert", response_model=dict)
 async def convert_lead_to_deal(
