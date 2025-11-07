@@ -8,6 +8,7 @@ from api.dependencies import get_current_user
 from config.database import leads_collection, accounts_collection, contacts_collection, deals_collection
 from services.activity_log import log_lead_created, log_lead_converted
 from utils.performance import time_operation, time_database_query
+from utils.query_filters import build_user_filter, get_user_ids
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -19,14 +20,10 @@ async def create_lead(request: CreateLeadRequest, current_user: dict = Depends(g
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        owner_id = str(user_doc["_id"])
-        org_id = user_doc.get("orgId")
-        
-        if not org_id:
-            raise HTTPException(
-                status_code=400, 
-                detail="User must belong to an organization. Please sign out and sign in again to create an organization."
-            )
+        # Get user IDs using reusable utility
+        user_ids = get_user_ids(user_doc)
+        owner_id = user_ids["ownerId"]
+        org_id = user_ids["orgId"]
         
         now = datetime.utcnow()
         
@@ -97,22 +94,20 @@ async def get_leads(
     limit: int = 100,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get leads for the current user's organization with pagination"""
+    """Get leads for the current user (ownerId) within their organization (orgId) with pagination"""
     endpoint_start = time.perf_counter()
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Build filter with both orgId and ownerId for data isolation
+        query_filter = build_user_filter(user_doc, include_owner=True)
         
         try:
             with time_database_query("leads", "find"):
                 cursor = leads_collection.find(
-                    {"orgId": org_id},
+                    query_filter,
                     {"name": 1, "email": 1, "source": 1, "status": 1, "ownerId": 1, "orgId": 1, "createdAt": 1, "updatedAt": 1}
                 ).sort("createdAt", -1).skip(skip).limit(limit)
                 leads = list(cursor)
@@ -158,14 +153,17 @@ async def convert_lead_to_deal(
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        owner_id = str(user_doc["_id"])
-        org_id = user_doc.get("orgId")
+        # Get user IDs using reusable utility
+        user_ids = get_user_ids(user_doc)
+        owner_id = user_ids["ownerId"]
+        org_id = user_ids["orgId"]
         
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Build filter to ensure user can only convert their own leads
+        query_filter = build_user_filter(user_doc, include_owner=True)
+        query_filter["_id"] = ObjectId(lead_id)
         
-        # Fetch the lead
-        lead = leads_collection.find_one({"_id": ObjectId(lead_id), "orgId": org_id})
+        # Fetch the lead - only if it belongs to the current user
+        lead = leads_collection.find_one(query_filter)
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
