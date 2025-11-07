@@ -22,8 +22,8 @@ def create_activity(
         "body": body,
         "tags": tags or [],
         "attachments": [],
-        "recordingUrl": None,
-        "externalId": None,
+        "recordingUrl": "",
+        "externalId": "",
         "createdAt": datetime.utcnow()
     }
     
