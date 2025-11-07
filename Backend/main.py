@@ -6,7 +6,7 @@ import uvicorn
 from config.settings import CORS_ORIGINS, PORT, HOST
 from config.database import initialize_database
 from services.firebase import initialize_firebase
-from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets
+from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard
 
 # Initialize FastAPI app
 app = FastAPI(title="Lighthouse CRM Backend")
@@ -38,6 +38,7 @@ app.include_router(deals.router)
 app.include_router(activities.router)
 app.include_router(tenants.router)
 app.include_router(tickets.router)
+app.include_router(dashboard.router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host=HOST, port=PORT)
