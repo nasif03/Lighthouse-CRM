@@ -352,3 +352,32 @@ async def convert_lead_to_deal(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to convert lead: {str(e)}")
 
+@router.delete("/{lead_id}")
+async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a lead - only for the current user's leads"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Build filter to ensure user can only delete their own leads
+        query_filter = build_user_filter(user_doc, include_owner=True)
+        query_filter["_id"] = ObjectId(lead_id)
+        
+        # Check if lead exists and belongs to user
+        lead = leads_collection.find_one(query_filter)
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Delete the lead
+        leads_collection.delete_one({"_id": ObjectId(lead_id)})
+        
+        return {"message": "Lead deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting lead: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete lead: {str(e)}")
+

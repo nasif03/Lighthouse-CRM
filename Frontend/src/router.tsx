@@ -12,6 +12,7 @@ import Support from './pages/Support';
 import Administration from './pages/Administration';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import SubmitTicket from './pages/SubmitTicket';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export const router = createBrowserRouter([
@@ -40,6 +41,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />
+  },
+  {
+    path: '/ticket/:orgId',
+    element: <SubmitTicket />
   },
   {
     path: '*',

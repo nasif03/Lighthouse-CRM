@@ -1,19 +1,32 @@
 import { PropsWithChildren } from 'react';
+import { clsx } from 'clsx';
 
-export default function Card({ children }: PropsWithChildren) {
+interface CardProps extends PropsWithChildren {
+  className?: string;
+}
+
+export default function Card({ children, className }: CardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className={clsx("rounded-lg border border-gray-200 bg-white shadow-sm", className)}>
       {children}
     </div>
   );
 }
 
-export function CardHeader({ children }: PropsWithChildren) {
-  return <div className="px-5 py-3.5 border-b border-gray-200 font-semibold tracking-tight">{children}</div>;
+interface CardHeaderProps extends PropsWithChildren {
+  className?: string;
 }
 
-export function CardContent({ children }: PropsWithChildren) {
-  return <div className="p-5">{children}</div>;
+export function CardHeader({ children, className }: CardHeaderProps) {
+  return <div className={clsx("px-5 py-3.5 border-b border-gray-200 font-semibold tracking-tight", className)}>{children}</div>;
+}
+
+interface CardContentProps extends PropsWithChildren {
+  className?: string;
+}
+
+export function CardContent({ children, className }: CardContentProps) {
+  return <div className={clsx("p-5", className)}>{children}</div>;
 }
 
 

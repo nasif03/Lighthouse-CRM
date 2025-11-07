@@ -14,6 +14,7 @@ contacts_collection = db.contacts
 accounts_collection = db.accounts
 deals_collection = db.deals
 activities_collection = db.activities
+tickets_collection = db.tickets
 
 def test_connection():
     """Test MongoDB connection"""
@@ -168,6 +169,13 @@ def create_indexes():
         safe_create_index(activities_collection, [("orgId", 1), ("entityType", 1), ("entityId", 1)], name="activities_orgId_entity_idx")
         safe_create_index(activities_collection, [("orgId", 1), ("createdAt", -1)], name="activities_orgId_createdAt_idx")
         safe_create_index(activities_collection, [("entityType", 1), ("entityId", 1)], name="activities_entity_idx")
+        
+        # Tickets collection indexes
+        safe_create_index(tickets_collection, "orgId", name="tickets_orgId_idx")
+        safe_create_index(tickets_collection, "ticketNumber", name="tickets_ticketNumber_idx", unique=True)
+        safe_create_index(tickets_collection, [("orgId", 1), ("status", 1)], name="tickets_orgId_status_idx")
+        safe_create_index(tickets_collection, [("orgId", 1), ("createdAt", -1)], name="tickets_orgId_createdAt_idx")
+        safe_create_index(tickets_collection, "email", name="tickets_email_idx")
         
         print("✅ Database indexes created successfully")
     except Exception as e:
