@@ -3,7 +3,7 @@ import Input from '../components/ui/Input';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Link } from 'react-router-dom';
 
@@ -48,14 +48,7 @@ export default function Contacts() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (token) {
-      fetchContacts();
-      fetchAccounts();
-    }
-  }, [token]);
-
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     if (!token) {
       setIsLoading(false);
       return;
@@ -84,9 +77,9 @@ export default function Contacts() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     if (!token) return;
 
     try {
@@ -105,7 +98,14 @@ export default function Contacts() {
     } catch (err) {
       console.error('Error fetching accounts:', err);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchContacts();
+      fetchAccounts();
+    }
+  }, [token, fetchContacts, fetchAccounts]);
 
   const filteredContacts = contacts.filter(c => 
     c.firstName.toLowerCase().includes(query.toLowerCase()) ||

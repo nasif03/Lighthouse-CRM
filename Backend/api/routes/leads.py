@@ -1,9 +1,13 @@
 """Leads API routes"""
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
+import time
+from bson import ObjectId
 from models.lead import LeadResponse, CreateLeadRequest
 from api.dependencies import get_current_user
-from config.database import leads_collection
+from config.database import leads_collection, accounts_collection, contacts_collection, deals_collection
+from services.activity_log import log_lead_created, log_lead_converted
+from utils.performance import time_operation, time_database_query
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -61,6 +65,9 @@ async def create_lead(request: CreateLeadRequest, current_user: dict = Depends(g
             if not inserted_lead:
                 raise HTTPException(status_code=500, detail="Lead was not found after insertion")
             
+            # Log activity
+            log_lead_created(org_id, owner_id, lead_id, request.name)
+            
         except Exception as db_error:
             print(f"Database error creating lead: {str(db_error)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
@@ -91,6 +98,7 @@ async def get_leads(
     current_user: dict = Depends(get_current_user)
 ):
     """Get leads for the current user's organization with pagination"""
+    endpoint_start = time.perf_counter()
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -102,29 +110,35 @@ async def get_leads(
             raise HTTPException(status_code=400, detail="User must belong to an organization")
         
         try:
-            cursor = leads_collection.find(
-                {"orgId": org_id},
-                {"name": 1, "email": 1, "source": 1, "status": 1, "ownerId": 1, "orgId": 1, "createdAt": 1, "updatedAt": 1}
-            ).sort("createdAt", -1).skip(skip).limit(limit)
-            leads = list(cursor)
+            with time_database_query("leads", "find"):
+                cursor = leads_collection.find(
+                    {"orgId": org_id},
+                    {"name": 1, "email": 1, "source": 1, "status": 1, "ownerId": 1, "orgId": 1, "createdAt": 1, "updatedAt": 1}
+                ).sort("createdAt", -1).skip(skip).limit(limit)
+                leads = list(cursor)
         except Exception as db_error:
             print(f"Database error fetching leads: {str(db_error)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
         
-        return [
-            LeadResponse(
-                id=str(lead["_id"]),
-                name=lead.get("name", ""),
-                email=lead.get("email", ""),
-                source=lead.get("source", ""),
-                status=lead.get("status", "new"),
-                ownerId=lead.get("ownerId", ""),
-                orgId=lead.get("orgId", ""),
-                createdAt=lead.get("createdAt").isoformat() if lead.get("createdAt") else "",
-                updatedAt=lead.get("updatedAt").isoformat() if lead.get("updatedAt") else ""
-            )
-            for lead in leads
-        ]
+        with time_operation("Leads: Transform response", threshold_ms=50.0):
+            result = [
+                LeadResponse(
+                    id=str(lead["_id"]),
+                    name=lead.get("name", ""),
+                    email=lead.get("email", ""),
+                    source=lead.get("source", ""),
+                    status=lead.get("status", "new"),
+                    ownerId=lead.get("ownerId", ""),
+                    orgId=lead.get("orgId", ""),
+                    createdAt=lead.get("createdAt").isoformat() if lead.get("createdAt") else "",
+                    updatedAt=lead.get("updatedAt").isoformat() if lead.get("updatedAt") else ""
+                )
+                for lead in leads
+            ]
+        
+        endpoint_elapsed = (time.perf_counter() - endpoint_start) * 1000
+        print(f"✅ [GET /api/leads] Total: {endpoint_elapsed:.2f}ms, returned {len(result)} leads")
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -132,4 +146,133 @@ async def get_leads(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to fetch leads: {str(e)}")
+
+@router.post("/{lead_id}/convert", response_model=dict)
+async def convert_lead_to_deal(
+    lead_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Convert a lead to Account, Contact, and Deal"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        owner_id = str(user_doc["_id"])
+        org_id = user_doc.get("orgId")
+        
+        if not org_id:
+            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        
+        # Fetch the lead
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id), "orgId": org_id})
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        if lead.get("converted"):
+            raise HTTPException(status_code=400, detail="Lead has already been converted")
+        
+        now = datetime.utcnow()
+        
+        # Create Account from lead
+        account_data = {
+            "name": lead.get("name", "").split()[0] if lead.get("name") else "Unknown Company",
+            "domain": lead.get("email", "").split("@")[1] if "@" in lead.get("email", "") else "",
+            "industry": "",
+            "phone": lead.get("phone", ""),
+            "status": "active",
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "metadata": None,
+            "address": None,
+            "deleted": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        account_result = accounts_collection.insert_one(account_data)
+        account_id = str(account_result.inserted_id)
+        
+        # Create Contact from lead
+        contact_data = {
+            "firstName": lead.get("firstName", ""),
+            "lastName": lead.get("lastName", ""),
+            "email": lead.get("email", ""),
+            "phone": lead.get("phone", ""),
+            "title": "",
+            "accountId": ObjectId(account_id),
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "tags": lead.get("tags", []),
+            "metadata": None,
+            "deleted": False,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        contact_result = contacts_collection.insert_one(contact_data)
+        contact_id = str(contact_result.inserted_id)
+        
+        # Create Deal from lead
+        deal_data = {
+            "name": f"Deal: {lead.get('name', 'Untitled')}",
+            "accountId": ObjectId(account_id),
+            "contactId": ObjectId(contact_id),
+            "amount": None,
+            "currency": "USD",
+            "stageId": "prospecting",
+            "stageName": "Prospecting",
+            "probability": None,
+            "closeDate": None,
+            "status": "open",
+            "ownerId": owner_id,
+            "orgId": org_id,
+            "tags": lead.get("tags", []),
+            "lastActivityAt": now,
+            "metadata": None,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        deal_result = deals_collection.insert_one(deal_data)
+        deal_id = str(deal_result.inserted_id)
+        
+        # Update lead as converted
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {
+                "$set": {
+                    "converted": True,
+                    "convertedAt": now,
+                    "convertedBy": owner_id,
+                    "status": "converted",
+                    "accountId": ObjectId(account_id),
+                    "contactId": ObjectId(contact_id),
+                    "updatedAt": now
+                }
+            }
+        )
+        
+        # Log conversion activity
+        log_lead_converted(
+            org_id=org_id,
+            user_id=owner_id,
+            lead_id=lead_id,
+            lead_name=lead.get("name", "Untitled Lead"),
+            account_id=account_id,
+            contact_id=contact_id,
+            deal_id=deal_id
+        )
+        
+        return {
+            "message": "Lead converted successfully",
+            "leadId": lead_id,
+            "accountId": account_id,
+            "contactId": contact_id,
+            "dealId": deal_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error converting lead: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to convert lead: {str(e)}")
 

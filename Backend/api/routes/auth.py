@@ -135,3 +135,38 @@ async def logout():
     """Logout endpoint (client-side token removal)"""
     return {"message": "Logged out successfully"}
 
+@router.get("/organizations", response_model=list[dict])
+async def get_user_organizations(current_user: dict = Depends(get_current_user)):
+    """Get all organizations the user belongs to"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_id = str(user_doc["_id"])
+        user_org_id = user_doc.get("orgId")
+        
+        # Find all organizations where user is a member or admin
+        # For now, return the user's current org. In future, can expand to support multiple orgs
+        orgs = []
+        
+        if user_org_id:
+            org = organizations_collection.find_one({"_id": ObjectId(user_org_id)})
+            if org:
+                orgs.append({
+                    "id": str(org["_id"]),
+                    "name": org.get("name", ""),
+                    "domain": org.get("domain", ""),
+                    "isActive": True  # Current org is active
+                })
+        
+        # Also check if user is admin of any other orgs
+        # (This would require a many-to-many relationship, simplified for now)
+        
+        return orgs
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching user organizations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch organizations: {str(e)}")
+

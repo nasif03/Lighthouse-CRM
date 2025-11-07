@@ -2,9 +2,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
+import time
 from models.deal import DealResponse, CreateDealRequest, UpdateDealRequest
 from api.dependencies import get_current_user
 from config.database import deals_collection
+from services.activity_log import log_deal_created, log_deal_stage_changed
+from utils.performance import time_operation, time_database_query
 
 router = APIRouter(prefix="/api/deals", tags=["deals"])
 
@@ -15,6 +18,7 @@ async def get_deals(
     current_user: dict = Depends(get_current_user)
 ):
     """Get deals for the current user's organization with pagination"""
+    endpoint_start = time.perf_counter()
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -24,33 +28,39 @@ async def get_deals(
         if not org_id:
             raise HTTPException(status_code=400, detail="User must belong to an organization")
         
-        cursor = deals_collection.find(
-            {"orgId": org_id},
-            {"name": 1, "accountId": 1, "contactId": 1, "amount": 1, "currency": 1, "stageId": 1, "stageName": 1, "probability": 1, "closeDate": 1, "status": 1, "ownerId": 1, "orgId": 1, "tags": 1, "createdAt": 1, "updatedAt": 1}
-        ).sort("createdAt", -1).skip(skip).limit(limit)
-        deals = list(cursor)
+        with time_database_query("deals", "find"):
+            cursor = deals_collection.find(
+                {"orgId": org_id},
+                {"name": 1, "accountId": 1, "contactId": 1, "amount": 1, "currency": 1, "stageId": 1, "stageName": 1, "probability": 1, "closeDate": 1, "status": 1, "ownerId": 1, "orgId": 1, "tags": 1, "createdAt": 1, "updatedAt": 1}
+            ).sort("createdAt", -1).skip(skip).limit(limit)
+            deals = list(cursor)
         
-        return [
-            DealResponse(
-                id=str(deal["_id"]),
-                name=deal.get("name", ""),
-                accountId=str(deal["accountId"]) if deal.get("accountId") else None,
-                contactId=str(deal["contactId"]) if deal.get("contactId") else None,
-                amount=deal.get("amount"),
-                currency=deal.get("currency"),
-                stageId=deal.get("stageId"),
-                stageName=deal.get("stageName"),
-                probability=deal.get("probability"),
-                closeDate=deal.get("closeDate").isoformat() if deal.get("closeDate") else None,
-                status=deal.get("status", "open"),
-                ownerId=deal.get("ownerId", ""),
-                orgId=deal.get("orgId", ""),
-                tags=deal.get("tags", []),
-                createdAt=deal.get("createdAt").isoformat() if deal.get("createdAt") else "",
-                updatedAt=deal.get("updatedAt").isoformat() if deal.get("updatedAt") else ""
-            )
-            for deal in deals
-        ]
+        with time_operation("Deals: Transform response", threshold_ms=50.0):
+            result = [
+                DealResponse(
+                    id=str(deal["_id"]),
+                    name=deal.get("name", ""),
+                    accountId=str(deal["accountId"]) if deal.get("accountId") else None,
+                    contactId=str(deal["contactId"]) if deal.get("contactId") else None,
+                    amount=deal.get("amount"),
+                    currency=deal.get("currency"),
+                    stageId=deal.get("stageId"),
+                    stageName=deal.get("stageName"),
+                    probability=deal.get("probability"),
+                    closeDate=deal.get("closeDate").isoformat() if deal.get("closeDate") else None,
+                    status=deal.get("status", "open"),
+                    ownerId=deal.get("ownerId", ""),
+                    orgId=deal.get("orgId", ""),
+                    tags=deal.get("tags", []),
+                    createdAt=deal.get("createdAt").isoformat() if deal.get("createdAt") else "",
+                    updatedAt=deal.get("updatedAt").isoformat() if deal.get("updatedAt") else ""
+                )
+                for deal in deals
+            ]
+        
+        endpoint_elapsed = (time.perf_counter() - endpoint_start) * 1000
+        print(f"✅ [GET /api/deals] Total: {endpoint_elapsed:.2f}ms, returned {len(result)} deals")
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -101,6 +111,9 @@ async def create_deal(request: CreateDealRequest, current_user: dict = Depends(g
         result = deals_collection.insert_one(deal_data)
         deal_id = str(result.inserted_id)
         
+        # Log activity
+        log_deal_created(org_id, owner_id, deal_id, request.name)
+        
         return DealResponse(
             id=deal_id,
             name=request.name,
@@ -141,6 +154,10 @@ async def update_deal(deal_id: str, request: UpdateDealRequest, current_user: di
         if not deal:
             raise HTTPException(status_code=404, detail="Deal not found")
         
+        # Track stage change for activity log
+        old_stage = deal.get("stageName", deal.get("stageId", "Unknown"))
+        new_stage = None
+        
         update_data = {"updatedAt": datetime.utcnow(), "lastActivityAt": datetime.utcnow()}
         if request.name is not None:
             update_data["name"] = request.name
@@ -156,6 +173,7 @@ async def update_deal(deal_id: str, request: UpdateDealRequest, current_user: di
             update_data["stageId"] = request.stageId
         if request.stageName is not None:
             update_data["stageName"] = request.stageName
+            new_stage = request.stageName
         if request.probability is not None:
             update_data["probability"] = request.probability
         if request.closeDate is not None:
@@ -168,7 +186,20 @@ async def update_deal(deal_id: str, request: UpdateDealRequest, current_user: di
         if request.tags is not None:
             update_data["tags"] = request.tags
         
+        owner_id = str(user_doc["_id"])
+        
         deals_collection.update_one({"_id": ObjectId(deal_id)}, {"$set": update_data})
+        
+        # Log stage change if it occurred
+        if new_stage and new_stage != old_stage:
+            log_deal_stage_changed(
+                org_id=org_id,
+                user_id=owner_id,
+                deal_id=deal_id,
+                deal_name=deal.get("name", "Untitled Deal"),
+                old_stage=old_stage,
+                new_stage=new_stage
+            )
         
         updated_deal = deals_collection.find_one({"_id": ObjectId(deal_id)})
         return DealResponse(
