@@ -57,13 +57,14 @@ async def verify_token(request: VerifyTokenRequest):
                 is_admin = True
             
             # Create new user according to database_struct.json
+            # Store orgId as array to support multiple organizations
             user_data = {
                 "email": email,
                 "name": name,
                 "password": None,
                 "picture": picture,
                 "roleIds": [],
-                "orgId": org_id,
+                "orgId": [org_id] if org_id else [],
                 "isAdmin": is_admin,
                 "lastSeenAt": now,
                 "createdAt": now,
@@ -89,8 +90,15 @@ async def verify_token(request: VerifyTokenRequest):
                 update_data["name"] = name
             if user_doc.get("picture") != picture:
                 update_data["picture"] = picture
-            if not user_doc.get("orgId") and org_id:
-                update_data["orgId"] = org_id
+            # Update orgId if needed - convert to array format if it's a string
+            user_org_ids = user_doc.get("orgId", [])
+            if isinstance(user_org_ids, str):
+                user_org_ids = [user_org_ids]
+            if org_id and org_id not in user_org_ids:
+                user_org_ids.append(org_id)
+                update_data["orgId"] = user_org_ids
+            elif not user_org_ids and org_id:
+                update_data["orgId"] = [org_id]
             if user_doc.get("firebaseUid") != uid:
                 update_data["firebaseUid"] = uid
             

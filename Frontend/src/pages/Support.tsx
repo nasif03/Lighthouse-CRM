@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -6,108 +6,138 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import { clsx } from 'clsx';
+import { useAuthStore } from '../store/authStore';
+import { useTenantStore } from '../store/tenantStore';
+import { apiGet, apiPut } from '../utils/api';
 
 type Ticket = {
   id: string;
   ticketNumber: string;
   subject: string;
-  customerName: string;
-  customerEmail: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
-  assignedTo: string;
-  category: string;
+  name: string;
+  email: string;
+  phone?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  assignedTo: string | null;
+  assignedToName: string | null;
+  category: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-// Mock data - replace with API call
-const mockTickets: Ticket[] = [
-  {
-    id: '1',
-    ticketNumber: 'T-2024-001',
-    subject: 'Login Issue - Cannot access account',
-    customerName: 'John Doe',
-    customerEmail: 'john@example.com',
-    priority: 'High',
-    status: 'Open',
-    assignedTo: 'Unassigned',
-    category: 'Technical',
-    createdAt: '2024-01-15T10:30:00Z',
-    updatedAt: '2024-01-15T10:30:00Z',
-  },
-  {
-    id: '2',
-    ticketNumber: 'T-2024-002',
-    subject: 'Billing Question - Invoice discrepancy',
-    customerName: 'Jane Smith',
-    customerEmail: 'jane@example.com',
-    priority: 'Medium',
-    status: 'In Progress',
-    assignedTo: 'Sarah Johnson',
-    category: 'Billing',
-    createdAt: '2024-01-14T14:20:00Z',
-    updatedAt: '2024-01-15T09:15:00Z',
-  },
-  {
-    id: '3',
-    ticketNumber: 'T-2024-003',
-    subject: 'Feature Request - Export functionality',
-    customerName: 'Mike Wilson',
-    customerEmail: 'mike@example.com',
-    priority: 'Low',
-    status: 'Resolved',
-    assignedTo: 'Dev Team',
-    category: 'Feature Request',
-    createdAt: '2024-01-10T08:00:00Z',
-    updatedAt: '2024-01-14T16:45:00Z',
-  },
-  {
-    id: '4',
-    ticketNumber: 'T-2024-004',
-    subject: 'Critical Bug - Data loss issue',
-    customerName: 'Emily Brown',
-    customerEmail: 'emily@example.com',
-    priority: 'Critical',
-    status: 'Open',
-    assignedTo: 'Tech Lead',
-    category: 'Bug Report',
-    createdAt: '2024-01-15T11:00:00Z',
-    updatedAt: '2024-01-15T11:00:00Z',
-  },
-];
+type Employee = {
+  id: string;
+  name: string;
+  email: string;
+  picture?: string;
+};
 
 const priorityColors = {
-  Low: 'bg-gray-100 text-gray-700',
-  Medium: 'bg-blue-100 text-blue-700',
-  High: 'bg-orange-100 text-orange-700',
-  Critical: 'bg-red-100 text-red-700',
+  low: 'bg-gray-100 text-gray-700',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
 };
 
 const statusColors = {
-  Open: 'bg-yellow-100 text-yellow-700',
-  'In Progress': 'bg-blue-100 text-blue-700',
-  Resolved: 'bg-green-100 text-green-700',
-  Closed: 'bg-gray-100 text-gray-700',
+  open: 'bg-yellow-100 text-yellow-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  resolved: 'bg-green-100 text-green-700',
+  closed: 'bg-gray-100 text-gray-700',
+};
+
+const priorityLabels = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
+const statusLabels = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
 };
 
 export default function Support() {
   const navigate = useNavigate();
+  const { token } = useAuthStore();
+  const { activeTenantId } = useTenantStore();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<'date' | 'priority'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  useEffect(() => {
+    if (token && activeTenantId) {
+      fetchTickets();
+      fetchAssignableEmployees();
+    }
+  }, [token, activeTenantId]);
+
+  const fetchTickets = async () => {
+    if (!token) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<Ticket[]>('/api/tickets', token);
+      setTickets(data);
+    } catch (err: any) {
+      console.error('Error fetching tickets:', err);
+      setError(err.message || 'Failed to fetch tickets');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAssignableEmployees = async () => {
+    if (!token) return;
+    try {
+      const data = await apiGet<Employee[]>('/api/tickets/assignable-employees', token);
+      setEmployees(data);
+    } catch (err: any) {
+      console.error('Error fetching assignable employees:', err);
+    }
+  };
+
+  const handleAssignTicket = async (ticketId: string, employeeId: string | null) => {
+    if (!token) return;
+    try {
+      await apiPut(`/api/tickets/${ticketId}`, token, {
+        assignedTo: employeeId,
+      });
+      await fetchTickets();
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign ticket');
+    }
+  };
+
+  const handleStatusChange = async (ticketId: string, status: string) => {
+    if (!token) return;
+    try {
+      await apiPut(`/api/tickets/${ticketId}`, token, {
+        status: status,
+      });
+      await fetchTickets();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update ticket status');
+    }
+  };
 
   // Filter and sort tickets
-  const filteredTickets = mockTickets
+  const filteredTickets = tickets
     .filter(ticket => {
       const matchesSearch = 
         ticket.ticketNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         ticket.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.customerEmail.toLowerCase().includes(searchQuery.toLowerCase());
+        ticket.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ticket.email.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
       const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
@@ -115,16 +145,9 @@ export default function Support() {
       return matchesSearch && matchesStatus && matchesPriority;
     })
     .sort((a, b) => {
-      if (sortBy === 'date') {
-        const dateA = new Date(a.updatedAt).getTime();
-        const dateB = new Date(b.updatedAt).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-      } else {
-        const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-        const priorityA = priorityOrder[a.priority];
-        const priorityB = priorityOrder[b.priority];
-        return sortOrder === 'asc' ? priorityA - priorityB : priorityB - priorityA;
-      }
+      const dateA = new Date(a.updatedAt).getTime();
+      const dateB = new Date(b.updatedAt).getTime();
+      return dateB - dateA; // Newest first
     });
 
   const handleSelectTicket = (ticketId: string) => {
@@ -151,11 +174,32 @@ export default function Support() {
   };
 
   const stats = {
-    total: mockTickets.length,
-    open: mockTickets.filter(t => t.status === 'Open').length,
-    inProgress: mockTickets.filter(t => t.status === 'In Progress').length,
-    resolved: mockTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length,
+    total: tickets.length,
+    open: tickets.filter(t => t.status === 'open').length,
+    inProgress: tickets.filter(t => t.status === 'in_progress').length,
+    resolved: tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
   };
+
+  if (error && error.includes('permission')) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="text-red-600 mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <p className="text-sm text-gray-500">
+              Please contact your administrator to assign you a role with ticket permissions (read:tickets or write:tickets).
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -201,6 +245,12 @@ export default function Support() {
           </div>
         </CardHeader>
         <CardContent>
+          {error && !error.includes('permission') && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Filters and Search */}
           <div className="mb-4 space-y-3">
             <div className="flex flex-col md:flex-row gap-3">
@@ -218,10 +268,10 @@ export default function Support() {
                 className="w-full md:w-48"
               >
                 <option value="all">All Statuses</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
               </Select>
               <Select
                 value={priorityFilter}
@@ -229,24 +279,10 @@ export default function Support() {
                 className="w-full md:w-48"
               >
                 <option value="all">All Priorities</option>
-                <option value="Critical">Critical</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </Select>
-              <Select
-                value={`${sortBy}-${sortOrder}`}
-                onChange={(e) => {
-                  const [by, order] = e.target.value.split('-');
-                  setSortBy(by as 'date' | 'priority');
-                  setSortOrder(order as 'asc' | 'desc');
-                }}
-                className="w-full md:w-48"
-              >
-                <option value="date-desc">Sort: Newest First</option>
-                <option value="date-asc">Sort: Oldest First</option>
-                <option value="priority-desc">Sort: Priority High</option>
-                <option value="priority-asc">Sort: Priority Low</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
               </Select>
             </div>
 
@@ -257,10 +293,22 @@ export default function Support() {
                   {selectedTickets.size} ticket{selectedTickets.size > 1 ? 's' : ''} selected
                 </span>
                 <div className="flex gap-2 ml-auto">
-                  <Button variant="secondary" size="sm" onClick={() => alert('Bulk assign - TODO')}>
+                  <Button variant="secondary" size="sm" onClick={() => {
+                    const employeeId = prompt('Enter employee ID to assign:');
+                    if (employeeId) {
+                      selectedTickets.forEach(ticketId => {
+                        handleAssignTicket(ticketId, employeeId);
+                      });
+                    }
+                  }}>
                     Assign
                   </Button>
-                  <Button variant="secondary" size="sm" onClick={() => alert('Bulk close - TODO')}>
+                  <Button variant="secondary" size="sm" onClick={() => {
+                    selectedTickets.forEach(ticketId => {
+                      handleStatusChange(ticketId, 'closed');
+                    });
+                    setSelectedTickets(new Set());
+                  }}>
                     Close
                   </Button>
                   <Button variant="secondary" size="sm" onClick={() => setSelectedTickets(new Set())}>
@@ -272,96 +320,121 @@ export default function Support() {
           </div>
 
           {/* Tickets Table */}
-          <div className="overflow-x-auto">
-            <Table>
-              <THead>
-                <tr>
-                  <TH>
-                    <input
-                      type="checkbox"
-                      checked={selectedTickets.size === filteredTickets.length && filteredTickets.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                  </TH>
-                  <TH>Ticket ID</TH>
-                  <TH>Subject</TH>
-                  <TH>Customer</TH>
-                  <TH>Priority</TH>
-                  <TH>Status</TH>
-                  <TH>Assigned To</TH>
-                  <TH>Created</TH>
-                  <TH>Last Updated</TH>
-                  <TH>Actions</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {filteredTickets.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-8 text-gray-500">Loading tickets...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <THead>
                   <tr>
-                    <TD colSpan={10} className="text-center py-8 text-gray-500">
-                      No tickets found
-                    </TD>
+                    <TH>
+                      <input
+                        type="checkbox"
+                        checked={selectedTickets.size === filteredTickets.length && filteredTickets.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                    </TH>
+                    <TH>Ticket ID</TH>
+                    <TH>Subject</TH>
+                    <TH>Customer</TH>
+                    <TH>Priority</TH>
+                    <TH>Status</TH>
+                    <TH>Assigned To</TH>
+                    <TH>Created</TH>
+                    <TH>Last Updated</TH>
+                    <TH>Actions</TH>
                   </tr>
-                ) : (
-                  filteredTickets.map((ticket) => (
-                    <TR
-                      key={ticket.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/support/${ticket.id}`)}
-                    >
-                      <TD onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedTickets.has(ticket.id)}
-                          onChange={() => handleSelectTicket(ticket.id)}
-                          className="rounded border-gray-300"
-                        />
+                </THead>
+                <TBody>
+                  {filteredTickets.length === 0 ? (
+                    <tr>
+                      <TD colSpan={10} className="text-center py-8 text-gray-500">
+                        {tickets.length === 0 ? 'No tickets found' : 'No tickets match your filters'}
                       </TD>
-                      <TD>
-                        <span className="font-mono text-xs text-gray-600">{ticket.ticketNumber}</span>
-                      </TD>
-                      <TD>
-                        <div className="font-medium">{ticket.subject}</div>
-                        <div className="text-xs text-gray-500">{ticket.category}</div>
-                      </TD>
-                      <TD>
-                        <div>{ticket.customerName}</div>
-                        <div className="text-xs text-gray-500">{ticket.customerEmail}</div>
-                      </TD>
-                      <TD>
-                        <span className={clsx('px-2 py-1 rounded text-xs font-medium', priorityColors[ticket.priority])}>
-                          {ticket.priority}
-                        </span>
-                      </TD>
-                      <TD>
-                        <span className={clsx('px-2 py-1 rounded text-xs font-medium', statusColors[ticket.status])}>
-                          {ticket.status}
-                        </span>
-                      </TD>
-                      <TD>
-                        <span className="text-sm">{ticket.assignedTo}</span>
-                      </TD>
-                      <TD>
-                        <span className="text-sm text-gray-600">{formatDate(ticket.createdAt)}</span>
-                      </TD>
-                      <TD>
-                        <span className="text-sm text-gray-600">{formatDate(ticket.updatedAt)}</span>
-                      </TD>
-                      <TD onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/support/${ticket.id}`)}
-                        >
-                          View
-                        </Button>
-                      </TD>
-                    </TR>
-                  ))
-                )}
-              </TBody>
-            </Table>
-          </div>
+                    </tr>
+                  ) : (
+                    filteredTickets.map((ticket) => (
+                      <TR
+                        key={ticket.id}
+                        className="cursor-pointer hover:bg-gray-50"
+                        onClick={() => navigate(`/support/${ticket.id}`)}
+                      >
+                        <TD onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedTickets.has(ticket.id)}
+                            onChange={() => handleSelectTicket(ticket.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </TD>
+                        <TD>
+                          <span className="font-mono text-xs text-gray-600">{ticket.ticketNumber}</span>
+                        </TD>
+                        <TD>
+                          <div className="font-medium">{ticket.subject}</div>
+                          {ticket.category && (
+                            <div className="text-xs text-gray-500">{ticket.category}</div>
+                          )}
+                        </TD>
+                        <TD>
+                          <div>{ticket.name}</div>
+                          <div className="text-xs text-gray-500">{ticket.email}</div>
+                        </TD>
+                        <TD>
+                          <span className={clsx('px-2 py-1 rounded text-xs font-medium', priorityColors[ticket.priority])}>
+                            {priorityLabels[ticket.priority]}
+                          </span>
+                        </TD>
+                        <TD>
+                          <span className={clsx('px-2 py-1 rounded text-xs font-medium', statusColors[ticket.status])}>
+                            {statusLabels[ticket.status]}
+                          </span>
+                        </TD>
+                        <TD>
+                          <div className="text-sm">
+                            {ticket.assignedToName || 'Unassigned'}
+                          </div>
+                        </TD>
+                        <TD>
+                          <span className="text-sm text-gray-600">{formatDate(ticket.createdAt)}</span>
+                        </TD>
+                        <TD>
+                          <span className="text-sm text-gray-600">{formatDate(ticket.updatedAt)}</span>
+                        </TD>
+                        <TD onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/support/${ticket.id}`)}
+                            >
+                              View
+                            </Button>
+                            <Select
+                              value={ticket.assignedTo || 'unassigned'}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const employeeId = e.target.value === 'unassigned' ? null : e.target.value;
+                                handleAssignTicket(ticket.id, employeeId);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs"
+                            >
+                              <option value="unassigned">Unassigned</option>
+                              {employees.map(emp => (
+                                <option key={emp.id} value={emp.id}>{emp.name}</option>
+                              ))}
+                            </Select>
+                          </div>
+                        </TD>
+                      </TR>
+                    ))
+                  )}
+                </TBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

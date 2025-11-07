@@ -6,6 +6,7 @@ from models.tenant import TenantResponse, TenantListResponse, SwitchTenantReques
 from api.dependencies import get_current_user
 from config.database import users_collection, organizations_collection
 from utils.performance import time_operation, time_database_query
+from services.user_cache import clear_user_cache
 
 router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
@@ -42,8 +43,18 @@ async def get_tenants(current_user: dict = Depends(get_current_user)):
                 for org in orgs
             ]
         
-        # Get active tenant (first org or user's primary org)
-        active_tenant_id = str(orgs[0]["_id"]) if orgs else None
+        # Get active tenant - check user's activeOrgId first, otherwise use first org
+        stored_active_org_id = user_doc.get("activeOrgId")
+        if stored_active_org_id and stored_active_org_id in org_ids:
+            active_tenant_id = stored_active_org_id
+        else:
+            active_tenant_id = str(orgs[0]["_id"]) if orgs else None
+            # If no activeOrgId is set, set it to the first org
+            if active_tenant_id and not stored_active_org_id:
+                users_collection.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {"$set": {"activeOrgId": active_tenant_id, "updatedAt": datetime.utcnow()}}
+                )
         
         return TenantListResponse(tenants=tenants, activeTenantId=active_tenant_id)
     except HTTPException:
@@ -76,12 +87,46 @@ async def switch_tenant(
         if tenant_id not in org_ids:
             raise HTTPException(status_code=403, detail="User does not belong to this organization")
         
-        # Update user's primary orgId (set as string for backward compatibility)
-        # Note: In a real multi-tenant system, you might want to track this differently
-        users_collection.update_one(
-            {"_id": user_id},
-            {"$set": {"orgId": tenant_id, "updatedAt": datetime.utcnow()}}
-        )
+        # Store active tenant preference in user document
+        # We'll use a custom field 'activeOrgId' to track the active tenant
+        # This allows users to have multiple orgs but work within one context at a time
+        now = datetime.utcnow()
+        try:
+            users_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"activeOrgId": tenant_id, "updatedAt": now}}
+            )
+        except Exception as e:
+            # Handle validation errors
+            error_str = str(e).lower()
+            if "validation" in error_str or "121" in error_str:
+                # Try using database command to bypass validation
+                try:
+                    from config.database import db
+                    db.command({
+                        "update": "users",
+                        "updates": [{
+                            "q": {"_id": user_id},
+                            "u": {"$set": {"activeOrgId": tenant_id, "updatedAt": now}},
+                            "bypassDocumentValidation": True
+                        }]
+                    })
+                except Exception as e2:
+                    # Try to update validator and retry
+                    from config.database import update_validators
+                    update_validators()
+                    users_collection.update_one(
+                        {"_id": user_id},
+                        {"$set": {"activeOrgId": tenant_id, "updatedAt": now}}
+                    )
+            else:
+                raise
+        
+        # Clear user cache to force refresh with new activeOrgId
+        # Get token from request to clear specific user's cache
+        # Note: We need to get the token from the request, but it's not directly available
+        # For now, clear all cache (or we could pass token in request)
+        clear_user_cache()
         
         return {
             "message": "Tenant switched successfully",

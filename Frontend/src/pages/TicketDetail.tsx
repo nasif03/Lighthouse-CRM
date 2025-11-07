@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -7,26 +7,31 @@ import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { clsx } from 'clsx';
+import { useAuthStore } from '../store/authStore';
+import { apiGet, apiPut } from '../utils/api';
 
 type Ticket = {
   id: string;
   ticketNumber: string;
   subject: string;
   description: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  company: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
-  category: string;
-  assignedTo: string;
-  assignedToId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  category: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
   createdAt: string;
   updatedAt: string;
-  resolvedAt?: string;
-  slaResponseTime?: string;
-  slaResolutionTime?: string;
+};
+
+type Employee = {
+  id: string;
+  name: string;
+  email: string;
+  picture?: string;
 };
 
 type Comment = {
@@ -39,102 +44,129 @@ type Comment = {
   createdAt: string;
 };
 
-type Activity = {
-  id: string;
-  type: 'status_change' | 'assignment' | 'priority_change' | 'comment' | 'created';
-  user: string;
-  description: string;
-  timestamp: string;
-};
-
-// Mock data - replace with API calls
-const mockTicket: Ticket = {
-  id: '1',
-  ticketNumber: 'T-2024-001',
-  subject: 'Login Issue - Cannot access account',
-  description: 'I have been unable to log into my account for the past 3 days. I keep getting an error message saying "Invalid credentials" but I am certain I am using the correct password. I have tried resetting my password multiple times but the reset emails are not arriving. This is preventing me from accessing important data.',
-  customerName: 'John Doe',
-  customerEmail: 'john@example.com',
-  customerPhone: '+1 (555) 123-4567',
-  company: 'Acme Corp',
-  priority: 'High',
-  status: 'In Progress',
-  category: 'Technical',
-  assignedTo: 'Sarah Johnson',
-  assignedToId: 'agent-1',
-  createdAt: '2024-01-15T10:30:00Z',
-  updatedAt: '2024-01-15T14:20:00Z',
-  slaResponseTime: '2 hours',
-  slaResolutionTime: '24 hours',
-};
-
-const mockComments: Comment[] = [
-  {
-    id: '1',
-    author: 'John Doe',
-    authorId: 'customer-1',
-    authorType: 'customer',
-    content: 'I have also noticed that the password reset link in the email is not working when I click it.',
-    isInternal: false,
-    createdAt: '2024-01-15T11:00:00Z',
-  },
-  {
-    id: '2',
-    author: 'Sarah Johnson',
-    authorId: 'agent-1',
-    authorType: 'agent',
-    content: 'Thank you for the additional information. I have escalated this to our technical team. They are investigating the email delivery issue.',
-    isInternal: false,
-    createdAt: '2024-01-15T12:15:00Z',
-  },
-  {
-    id: '3',
-    author: 'Sarah Johnson',
-    authorId: 'agent-1',
-    authorType: 'agent',
-    content: 'Internal note: Customer account shows multiple failed login attempts. Possible account lockout. Checking with security team.',
-    isInternal: true,
-    createdAt: '2024-01-15T12:20:00Z',
-  },
-];
-
-const mockActivities: Activity[] = [
-  { id: '1', type: 'created', user: 'John Doe', description: 'Ticket created', timestamp: '2024-01-15T10:30:00Z' },
-  { id: '2', type: 'assignment', user: 'System', description: 'Assigned to Sarah Johnson', timestamp: '2024-01-15T10:35:00Z' },
-  { id: '3', type: 'status_change', user: 'Sarah Johnson', description: 'Status changed from Open to In Progress', timestamp: '2024-01-15T12:00:00Z' },
-  { id: '4', type: 'comment', user: 'John Doe', description: 'Customer added a comment', timestamp: '2024-01-15T11:00:00Z' },
-  { id: '5', type: 'comment', user: 'Sarah Johnson', description: 'Agent replied to customer', timestamp: '2024-01-15T12:15:00Z' },
-];
-
 const priorityColors = {
-  Low: 'bg-gray-100 text-gray-700',
-  Medium: 'bg-blue-100 text-blue-700',
-  High: 'bg-orange-100 text-orange-700',
-  Critical: 'bg-red-100 text-red-700',
+  low: 'bg-gray-100 text-gray-700',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
 };
 
 const statusColors = {
-  Open: 'bg-yellow-100 text-yellow-700',
-  'In Progress': 'bg-blue-100 text-blue-700',
-  Resolved: 'bg-green-100 text-green-700',
-  Closed: 'bg-gray-100 text-gray-700',
+  open: 'bg-yellow-100 text-yellow-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  resolved: 'bg-green-100 text-green-700',
+  closed: 'bg-gray-100 text-gray-700',
+};
+
+const priorityLabels = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
+const statusLabels = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
 };
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [ticket] = useState<Ticket>(mockTicket);
-  const [comments, setComments] = useState<Comment[]>(mockComments);
+  const { token } = useAuthStore();
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [selectedAssignee, setSelectedAssignee] = useState(ticket.assignedToId);
-  const [selectedStatus, setSelectedStatus] = useState(ticket.status);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('unassigned');
+  const [selectedStatus, setSelectedStatus] = useState<string>('open');
+  const [selectedPriority, setSelectedPriority] = useState<string>('medium');
+
+  useEffect(() => {
+    if (token && id) {
+      fetchTicket();
+      fetchAssignableEmployees();
+    }
+  }, [token, id]);
+
+  const fetchTicket = async () => {
+    if (!token || !id) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<Ticket>(`/api/tickets/${id}`, token);
+      setTicket(data);
+      setSelectedStatus(data.status);
+      setSelectedPriority(data.priority);
+      setSelectedAssignee(data.assignedTo || 'unassigned');
+    } catch (err: any) {
+      console.error('Error fetching ticket:', err);
+      setError(err.message || 'Failed to fetch ticket');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchAssignableEmployees = async () => {
+    if (!token) return;
+    try {
+      const data = await apiGet<Employee[]>('/api/tickets/assignable-employees', token);
+      setEmployees(data);
+    } catch (err: any) {
+      console.error('Error fetching assignable employees:', err);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!token || !id) return;
+    try {
+      const employeeId = selectedAssignee === 'unassigned' ? null : selectedAssignee;
+      await apiPut(`/api/tickets/${id}`, token, {
+        assignedTo: employeeId,
+      });
+      await fetchTicket();
+      setShowAssignModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign ticket');
+    }
+  };
+
+  const handleStatusChange = async () => {
+    if (!token || !id) return;
+    try {
+      await apiPut(`/api/tickets/${id}`, token, {
+        status: selectedStatus,
+      });
+      await fetchTicket();
+      setShowStatusModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update ticket status');
+    }
+  };
+
+  const handlePriorityChange = async (priority: string) => {
+    if (!token || !id) return;
+    try {
+      await apiPut(`/api/tickets/${id}`, token, {
+        priority: priority,
+      });
+      await fetchTicket();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update ticket priority');
+    }
+  };
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
 
+    // TODO: Implement comment API endpoint
     const comment: Comment = {
       id: Date.now().toString(),
       author: 'Current User', // Replace with actual user
@@ -150,18 +182,6 @@ export default function TicketDetail() {
     setIsInternalNote(false);
   };
 
-  const handleAssign = () => {
-    // TODO: API call to assign ticket
-    alert(`Ticket assigned to ${selectedAssignee}`);
-    setShowAssignModal(false);
-  };
-
-  const handleStatusChange = () => {
-    // TODO: API call to update status
-    alert(`Ticket status changed to ${selectedStatus}`);
-    setShowStatusModal(false);
-  };
-
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -172,6 +192,37 @@ export default function TicketDetail() {
       minute: '2-digit',
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center py-8 text-gray-500">Loading ticket...</div>
+      </div>
+    );
+  }
+
+  if (error || !ticket) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => navigate('/support')}>
+            ← Back to Tickets
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="text-red-600 mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Ticket</h2>
+            <p className="text-gray-600">{error || 'Ticket not found'}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -193,16 +244,16 @@ export default function TicketDetail() {
                   <div className="flex items-center gap-3 mb-2">
                     <span className="font-mono text-sm text-gray-500">{ticket.ticketNumber}</span>
                     <span className={clsx('px-2 py-1 rounded text-xs font-medium', priorityColors[ticket.priority])}>
-                      {ticket.priority}
+                      {priorityLabels[ticket.priority]}
                     </span>
                     <span className={clsx('px-2 py-1 rounded text-xs font-medium', statusColors[ticket.status])}>
-                      {ticket.status}
+                      {statusLabels[ticket.status]}
                     </span>
                   </div>
                   <h1 className="text-2xl font-semibold">{ticket.subject}</h1>
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <span>Category: {ticket.category}</span>
-                    <span>•</span>
+                    {ticket.category && <span>Category: {ticket.category}</span>}
+                    {ticket.category && <span>•</span>}
                     <span>Created: {formatDateTime(ticket.createdAt)}</span>
                     <span>•</span>
                     <span>Last updated: {formatDateTime(ticket.updatedAt)}</span>
@@ -226,31 +277,6 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* Attachments Section */}
-          <Card>
-            <CardHeader>
-              <h2 className="text-lg font-semibold">Attachments</h2>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {/* Mock attachments - replace with actual data */}
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
-                  <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-700">screenshot.png</div>
-                    <div className="text-xs text-gray-500">2.3 MB • Uploaded by John Doe</div>
-                  </div>
-                  <Button variant="ghost" size="sm">Download</Button>
-                </div>
-                <div className="text-sm text-gray-500 text-center py-2">
-                  No other attachments
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Comments Section */}
           <Card>
             <CardHeader>
@@ -258,37 +284,43 @@ export default function TicketDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4 mb-4">
-                {comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className={clsx(
-                      'p-4 rounded-lg border',
-                      comment.isInternal
-                        ? 'bg-yellow-50 border-yellow-200'
-                        : comment.authorType === 'agent'
-                        ? 'bg-blue-50 border-blue-200'
-                        : 'bg-gray-50 border-gray-200'
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{comment.author}</span>
-                        {comment.isInternal && (
-                          <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded">
-                            Internal Note
-                          </span>
-                        )}
-                        {comment.authorType === 'agent' && !comment.isInternal && (
-                          <span className="px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded">
-                            Agent
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500">{formatDateTime(comment.createdAt)}</span>
-                    </div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.content}</p>
+                {comments.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    No comments yet. Be the first to add a comment.
                   </div>
-                ))}
+                ) : (
+                  comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className={clsx(
+                        'p-4 rounded-lg border',
+                        comment.isInternal
+                          ? 'bg-yellow-50 border-yellow-200'
+                          : comment.authorType === 'agent'
+                          ? 'bg-blue-50 border-blue-200'
+                          : 'bg-gray-50 border-gray-200'
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{comment.author}</span>
+                          {comment.isInternal && (
+                            <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded">
+                              Internal Note
+                            </span>
+                          )}
+                          {comment.authorType === 'agent' && !comment.isInternal && (
+                            <span className="px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded">
+                              Agent
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">{formatDateTime(comment.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.content}</p>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* Add Comment Form */}
@@ -333,20 +365,16 @@ export default function TicketDetail() {
             <CardContent className="space-y-2 text-sm">
               <div>
                 <div className="text-gray-500">Name</div>
-                <div className="font-medium">{ticket.customerName}</div>
+                <div className="font-medium">{ticket.name}</div>
               </div>
               <div>
                 <div className="text-gray-500">Email</div>
-                <div>{ticket.customerEmail}</div>
+                <div>{ticket.email}</div>
               </div>
-              <div>
-                <div className="text-gray-500">Phone</div>
-                <div>{ticket.customerPhone}</div>
-              </div>
-              {ticket.company && (
+              {ticket.phone && (
                 <div>
-                  <div className="text-gray-500">Company</div>
-                  <div>{ticket.company}</div>
+                  <div className="text-gray-500">Phone</div>
+                  <div>{ticket.phone}</div>
                 </div>
               )}
             </CardContent>
@@ -360,7 +388,7 @@ export default function TicketDetail() {
             <CardContent className="space-y-2 text-sm">
               <div>
                 <div className="text-gray-500">Assigned To</div>
-                <div className="font-medium">{ticket.assignedTo || 'Unassigned'}</div>
+                <div className="font-medium">{ticket.assignedToName || 'Unassigned'}</div>
               </div>
               <Button variant="secondary" size="sm" className="w-full mt-2" onClick={() => setShowAssignModal(true)}>
                 Reassign
@@ -368,44 +396,22 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* SLA Info */}
-          {ticket.slaResponseTime && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-sm font-semibold">SLA Information</h3>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div>
-                  <div className="text-gray-500">Response Time</div>
-                  <div>{ticket.slaResponseTime}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500">Resolution Time</div>
-                  <div>{ticket.slaResolutionTime}</div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Activity Timeline */}
+          {/* Priority */}
           <Card>
             <CardHeader>
-              <h3 className="text-sm font-semibold">Activity Timeline</h3>
+              <h3 className="text-sm font-semibold">Priority</h3>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {mockActivities.map((activity) => (
-                  <div key={activity.id} className="flex gap-3">
-                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-brand-600 mt-2" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-700">{activity.description}</div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {activity.user} • {formatDateTime(activity.timestamp)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <Select
+                value={ticket.priority}
+                onChange={(e) => handlePriorityChange(e.target.value)}
+                className="w-full"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </Select>
             </CardContent>
           </Card>
         </div>
@@ -418,10 +424,9 @@ export default function TicketDetail() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
             <Select value={selectedAssignee} onChange={(e) => setSelectedAssignee(e.target.value)}>
               <option value="unassigned">Unassigned</option>
-              <option value="agent-1">Sarah Johnson</option>
-              <option value="agent-2">Mike Chen</option>
-              <option value="agent-3">Emily Davis</option>
-              <option value="team-dev">Dev Team</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.name}</option>
+              ))}
             </Select>
           </div>
           <div className="flex justify-end gap-2">
@@ -438,11 +443,11 @@ export default function TicketDetail() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <Select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value as Ticket['status'])}>
-              <option value="Open">Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Resolved">Resolved</option>
-              <option value="Closed">Closed</option>
+            <Select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
             </Select>
           </div>
           <div className="flex justify-end gap-2">
@@ -456,4 +461,3 @@ export default function TicketDetail() {
     </div>
   );
 }
-

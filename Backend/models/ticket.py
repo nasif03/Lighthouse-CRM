@@ -13,6 +13,13 @@ class CreateTicketRequest(BaseModel):
     priority: Optional[str] = "medium"  # low, medium, high, urgent
     category: Optional[str] = None  # e.g., technical, billing, feature_request, etc.
 
+class UpdateTicketRequest(BaseModel):
+    """Request model for updating a support ticket"""
+    status: Optional[str] = None  # open, in_progress, resolved, closed
+    priority: Optional[str] = None  # low, medium, high, urgent
+    assignedTo: Optional[str] = None  # User ID of assigned employee
+    category: Optional[str] = None
+
 class TicketResponse(BaseModel):
     """Response model for support ticket"""
     id: str
@@ -27,6 +34,7 @@ class TicketResponse(BaseModel):
     category: Optional[str] = None
     status: str  # open, in_progress, resolved, closed
     assignedTo: Optional[str] = None  # User ID of assigned agent
+    assignedToName: Optional[str] = None  # Name of assigned agent
     createdAt: str
     updatedAt: str
 

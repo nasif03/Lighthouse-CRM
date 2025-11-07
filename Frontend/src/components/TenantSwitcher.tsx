@@ -23,9 +23,11 @@ export function TenantSwitcher() {
     return null;
   }
 
+  const activeTenant = tenants.find(t => t.id === activeTenantId);
+
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-gray-700">Organization</span>
+      <span className="text-sm text-gray-700">Organization:</span>
       <select
         className="px-2 py-1.5 text-sm rounded border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
         value={activeTenantId || ''}
