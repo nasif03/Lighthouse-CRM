@@ -1,13 +1,11 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import Card, { CardContent, CardHeader } from '../components/ui/Card';
-import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { apiGet, apiPost, apiPut, apiDelete, clearCache } from '../utils/api';
+import { useDebounce } from '../hooks/useDebounce';
 import { Link } from 'react-router-dom';
-
-const API_BASE_URL = 'http://localhost:3000';
 
 type Contact = {
   id: string;
@@ -27,9 +25,32 @@ type Account = {
   name: string;
 };
 
+// Helper function to get initials from name
+const getInitials = (firstName: string, lastName?: string): string => {
+  if (lastName) {
+    return (firstName[0] + lastName[0]).toUpperCase();
+  }
+  return firstName.substring(0, 2).toUpperCase();
+};
+
+// Helper function to format relative time
+const formatRelativeTime = (dateString: string): string => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  
+  return date.toLocaleDateString();
+};
+
 export default function Contacts() {
   const { token } = useAuthStore();
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -47,6 +68,7 @@ export default function Contacts() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchingRef = useRef(false);
 
   const fetchContacts = useCallback(async () => {
     if (!token) {
@@ -54,28 +76,26 @@ export default function Contacts() {
       return;
     }
 
+    if (fetchingRef.current) {
+      return;
+    }
+
+    fetchingRef.current = true;
+
     try {
       setIsLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/contacts`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch contacts');
-      }
-
-      const data = await response.json();
+      const data = await apiGet<Contact[]>('/api/contacts', token);
       setContacts(data);
     } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching contacts:', err);
       setError(err.message || 'Failed to load contacts');
     } finally {
       setIsLoading(false);
+      fetchingRef.current = false;
     }
   }, [token]);
 
@@ -83,19 +103,12 @@ export default function Contacts() {
     if (!token) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/accounts`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAccounts(data);
+      const data = await apiGet<Account[]>('/api/accounts', token);
+      setAccounts(data);
+    } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
       }
-    } catch (err) {
       console.error('Error fetching accounts:', err);
     }
   }, [token]);
@@ -107,11 +120,26 @@ export default function Contacts() {
     }
   }, [token, fetchContacts, fetchAccounts]);
 
-  const filteredContacts = contacts.filter(c => 
-    c.firstName.toLowerCase().includes(query.toLowerCase()) ||
-    c.lastName?.toLowerCase().includes(query.toLowerCase()) ||
-    c.email.toLowerCase().includes(query.toLowerCase())
-  );
+  const getAccountName = (accountId?: string) => {
+    if (!accountId) return null;
+    const account = accounts.find(a => a.id === accountId);
+    return account?.name;
+  };
+
+  const filteredContacts = useMemo(() => {
+    if (!debouncedQuery) return contacts;
+    const lowerQuery = debouncedQuery.toLowerCase();
+    return contacts.filter(c => {
+      const fullName = `${c.firstName} ${c.lastName || ''}`.toLowerCase();
+      const accountName = c.accountId ? getAccountName(c.accountId)?.toLowerCase() : null;
+      return (
+        fullName.includes(lowerQuery) ||
+        c.email.toLowerCase().includes(lowerQuery) ||
+        (c.phone && c.phone.toLowerCase().includes(lowerQuery)) ||
+        (accountName && accountName.includes(lowerQuery))
+      );
+    });
+  }, [contacts, debouncedQuery, accounts]);
 
   const handleInputChange = (field: string, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -138,22 +166,12 @@ export default function Contacts() {
     if (!token) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/contacts/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete contact');
-      }
-
-      await fetchContacts();
+      await apiDelete(`/api/contacts/${id}`, token);
+      setContacts(prevContacts => prevContacts.filter(contact => contact.id !== id));
+      clearCache('/api/contacts');
     } catch (err: any) {
       console.error('Error deleting contact:', err);
-      alert(err.message || 'Failed to delete contact');
+      setError(err.message || 'Failed to delete contact');
     }
   };
 
@@ -169,26 +187,20 @@ export default function Contacts() {
     }
 
     try {
-      const url = isEditMode && editingId
-        ? `${API_BASE_URL}/api/contacts/${editingId}`
-        : `${API_BASE_URL}/api/contacts`;
-      
-      const method = isEditMode ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const payload: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName || undefined,
+        email: formData.email,
+        phone: formData.phone || undefined,
+        title: formData.title || undefined,
+        accountId: formData.accountId || undefined,
+        tags: formData.tags,
+      };
 
-      const responseData = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const errorMessage = responseData?.detail || responseData?.message || `HTTP ${response.status}`;
-        throw new Error(errorMessage);
+      if (isEditMode && editingId) {
+        await apiPut(`/api/contacts/${editingId}`, token, payload);
+      } else {
+        await apiPost('/api/contacts', token, payload);
       }
 
       setFormData({ firstName: '', lastName: '', email: '', phone: '', title: '', accountId: '', tags: [] });
@@ -196,6 +208,7 @@ export default function Contacts() {
       setIsEditMode(false);
       setEditingId(null);
       
+      clearCache('/api/contacts');
       await fetchContacts();
     } catch (error: any) {
       console.error('Error saving contact:', error);
@@ -215,81 +228,136 @@ export default function Contacts() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-600">Loading contacts...</div>
+      </div>
+    );
+  }
+
+  if (error && !filteredContacts.length) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600">{error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <Input 
-          placeholder="Search contacts" 
-          value={query} 
-          onChange={(e) => setQuery(e.target.value)} 
-        />
-        <Button onClick={() => {
-          setError(null);
-          setIsEditMode(false);
-          setEditingId(null);
-          setIsModalOpen(true);
-        }}>New Contact</Button>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Contacts</h1>
+        <div className="flex items-center gap-2">
+          <Input 
+            placeholder="Search contacts..." 
+            value={query} 
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-64"
+          />
+          <Button onClick={() => {
+            setError(null);
+            setIsEditMode(false);
+            setEditingId(null);
+            setIsModalOpen(true);
+          }}>New Contact</Button>
+        </div>
       </div>
-      <Card>
-        <CardHeader>Contacts</CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-600">Loading contacts...</div>
-          ) : error ? (
-            <div className="text-center py-8 text-red-600">{error}</div>
-          ) : filteredContacts.length === 0 ? (
-            <div className="text-center py-8 text-gray-600">
-              {query ? 'No contacts found matching your search' : 'No contacts yet. Create your first contact!'}
-            </div>
-          ) : (
-            <Table>
-              <THead>
-                <tr>
-                  <TH>Name</TH>
-                  <TH>Email</TH>
-                  <TH>Phone</TH>
-                  <TH>Title</TH>
-                  <TH>Account</TH>
-                  <TH>Actions</TH>
-                </tr>
-              </THead>
-              <TBody>
-                {filteredContacts.map(c => (
-                  <TR key={c.id}>
-                    <TD>{c.firstName} {c.lastName}</TD>
-                    <TD>{c.email}</TD>
-                    <TD>{c.phone || '-'}</TD>
-                    <TD>{c.title || '-'}</TD>
-                    <TD>
-                      {c.accountId ? (
-                        <Link to={`/accounts?accountId=${c.accountId}`} className="text-brand-600 hover:underline">
-                          View Account
-                        </Link>
-                      ) : '-'}
-                    </TD>
-                    <TD>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(c)}
-                          className="text-sm text-brand-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(c.id)}
-                          className="text-sm text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
+
+      {error && (
+        <div className="p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      {filteredContacts.length === 0 ? (
+        <div className="text-center py-12 text-gray-600">
+          {query ? 'No contacts found matching your search' : 'No contacts yet. Create your first contact!'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredContacts.map(contact => {
+            const fullName = `${contact.firstName} ${contact.lastName || ''}`.trim();
+            return (
+              <div
+                key={contact.id}
+                className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                    {getInitials(contact.firstName, contact.lastName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-base text-gray-900 truncate">
+                      {fullName}
+                    </div>
+                    {contact.title && (
+                      <div className="text-sm text-gray-600 truncate">
+                        {contact.title}
                       </div>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 mb-3">
+                  {contact.email && (
+                    <div className="text-sm text-gray-600 truncate" title={contact.email}>
+                      📧 {contact.email}
+                    </div>
+                  )}
+                  {contact.phone && (
+                    <div className="text-sm text-gray-600">
+                      📞 {contact.phone}
+                    </div>
+                  )}
+                  {contact.accountId && (
+                    <div className="text-sm text-gray-600 truncate">
+                      <Link 
+                        to={`/accounts?accountId=${contact.accountId}`} 
+                        className="text-brand-600 hover:underline flex items-center gap-1"
+                      >
+                        🏢 {getAccountName(contact.accountId) || 'View Account'}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                {contact.tags && contact.tags.length > 0 && (
+                  <div className="flex items-center gap-1 mb-3 flex-wrap">
+                    {contact.tags.slice(0, 2).map((tag, idx) => (
+                      <span key={idx} className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                        {tag}
+                      </span>
+                    ))}
+                    {contact.tags.length > 2 && (
+                      <span className="text-xs text-gray-500">+{contact.tags.length - 2}</span>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-xs text-gray-400 mb-3">
+                  {formatRelativeTime(contact.createdAt)}
+                </div>
+
+                <div className="flex gap-2 pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => handleEdit(contact)}
+                    className="flex-1 px-3 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(contact.id)}
+                    className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Modal 
         open={isModalOpen} 

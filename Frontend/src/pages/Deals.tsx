@@ -109,6 +109,9 @@ export default function Deals() {
       const data = await apiGet<Deal[]>('/api/deals', token);
       setDeals(data);
     } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching deals:', err);
       setError(err.message || 'Failed to load deals');
     } finally {
@@ -122,7 +125,10 @@ export default function Deals() {
     try {
       const data = await apiGet<Account[]>('/api/accounts', token);
       setAccounts(data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching accounts:', err);
     }
   }, [token]);
@@ -133,7 +139,10 @@ export default function Deals() {
     try {
       const data = await apiGet<Contact[]>('/api/contacts', token);
       setContacts(data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching contacts:', err);
     }
   }, [token]);
