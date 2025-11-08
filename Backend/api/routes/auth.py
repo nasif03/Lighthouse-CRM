@@ -22,50 +22,20 @@ async def verify_token(request: VerifyTokenRequest):
         name = decoded_token.get("name", email.split("@")[0] if email else "User")
         picture = decoded_token.get("picture")
         now = datetime.utcnow()
-        org_id = None
-        existing_org = None
-        
-        # Resolve organization by email domain; create if missing (optimized - single query)
-        if email and "@" in email:
-            domain = email.split("@", 1)[1].lower()
-            existing_org = organizations_collection.find_one({"domain": domain})
-            if not existing_org:
-                org_doc = {
-                    "name": domain,
-                    "billingInfo": None,
-                    "domain": domain,
-                    "settings": None,
-                    "salesStages": [],
-                    "admins": [],
-                    "createdAt": now,
-                    "updatedAt": now,
-                }
-                org_insert = organizations_collection.insert_one(org_doc)
-                org_id = str(org_insert.inserted_id)
-                # Store org data to avoid another query
-                existing_org = {"_id": org_insert.inserted_id, "admins": []}
-            else:
-                org_id = str(existing_org["_id"])
-        
         # Check if user exists in database
         user_doc = users_collection.find_one({"email": email})
     
         if not user_doc:
-            # Determine if user should be admin (first user in org)
-            is_admin = False
-            if org_id and existing_org and (not existing_org.get("admins") or len(existing_org.get("admins", [])) == 0):
-                is_admin = True
-            
-            # Create new user according to database_struct.json
-            # Store orgId as array to support multiple organizations
+            # Create new user - they start with no organizations
+            # User must create or join an organization from Settings
             user_data = {
                 "email": email,
                 "name": name,
                 "password": None,
                 "picture": picture,
                 "roleIds": [],
-                "orgId": [org_id] if org_id else [],
-                "isAdmin": is_admin,
+                "orgId": [],  # User starts with no organizations - must join or create one
+                "isAdmin": False,
                 "lastSeenAt": now,
                 "createdAt": now,
                 "firebaseUid": uid,
@@ -73,13 +43,6 @@ async def verify_token(request: VerifyTokenRequest):
             }
             insert_result = users_collection.insert_one(user_data)
             user_id = str(insert_result.inserted_id)
-            
-            # Update org admins if this is the first admin (single update operation)
-            if is_admin and org_id:
-                organizations_collection.update_one(
-                    {"_id": ObjectId(org_id)}, 
-                    {"$set": {"updatedAt": now}, "$push": {"admins": user_id}}
-                )
         else:
             # Update user info if needed (optimized - single update)
             user_id = str(user_doc["_id"])
@@ -90,15 +53,6 @@ async def verify_token(request: VerifyTokenRequest):
                 update_data["name"] = name
             if user_doc.get("picture") != picture:
                 update_data["picture"] = picture
-            # Update orgId if needed - convert to array format if it's a string
-            user_org_ids = user_doc.get("orgId", [])
-            if isinstance(user_org_ids, str):
-                user_org_ids = [user_org_ids]
-            if org_id and org_id not in user_org_ids:
-                user_org_ids.append(org_id)
-                update_data["orgId"] = user_org_ids
-            elif not user_org_ids and org_id:
-                update_data["orgId"] = [org_id]
             if user_doc.get("firebaseUid") != uid:
                 update_data["firebaseUid"] = uid
             

@@ -25,13 +25,23 @@ async def get_tenants(current_user: dict = Depends(get_current_user)):
         if isinstance(org_ids, str):
             org_ids = [org_ids]
         
-        if not org_ids:
+        # Normalize org_ids to strings
+        org_ids_str = [str(oid) if oid else None for oid in org_ids]
+        
+        # Also find organizations where user is admin (they should be able to switch to these)
+        admin_orgs = list(organizations_collection.find({"admins": user_id}))
+        admin_org_ids = [str(org["_id"]) for org in admin_orgs]
+        
+        # Combine user's orgIds and admin orgIds
+        all_org_ids = list(set(org_ids_str + admin_org_ids))
+        
+        if not all_org_ids:
             return TenantListResponse(tenants=[], activeTenantId=None)
         
         # Fetch organizations
         with time_database_query("organizations", "find"):
             orgs = list(organizations_collection.find(
-                {"_id": {"$in": [ObjectId(oid) if ObjectId.is_valid(oid) else oid for oid in org_ids]}}
+                {"_id": {"$in": [ObjectId(oid) for oid in all_org_ids if ObjectId.is_valid(oid)]}}
             ))
         
         with time_operation("Tenants: Transform response", threshold_ms=10.0):
@@ -45,7 +55,7 @@ async def get_tenants(current_user: dict = Depends(get_current_user)):
         
         # Get active tenant - check user's activeOrgId first, otherwise use first org
         stored_active_org_id = user_doc.get("activeOrgId")
-        if stored_active_org_id and stored_active_org_id in org_ids:
+        if stored_active_org_id and stored_active_org_id in all_org_ids:
             active_tenant_id = stored_active_org_id
         else:
             active_tenant_id = str(orgs[0]["_id"]) if orgs else None
@@ -83,9 +93,20 @@ async def switch_tenant(
         
         tenant_id = request.tenant_id
         
+        # Normalize org_ids and tenant_id to strings for comparison
+        org_ids_str = [str(oid) if oid else None for oid in org_ids]
+        tenant_id_str = str(tenant_id) if tenant_id else None
+        
         # Verify user belongs to this organization
-        if tenant_id not in org_ids:
-            raise HTTPException(status_code=403, detail="User does not belong to this organization")
+        if tenant_id_str not in org_ids_str:
+            # Also check if user is admin of the organization (they should be able to switch to it)
+            org = organizations_collection.find_one({"_id": ObjectId(tenant_id) if ObjectId.is_valid(tenant_id) else tenant_id})
+            if not org:
+                raise HTTPException(status_code=404, detail="Organization not found")
+            
+            user_id_str = str(user_id)
+            if user_id_str not in org.get("admins", []):
+                raise HTTPException(status_code=403, detail="User does not belong to this organization")
         
         # Store active tenant preference in user document
         # We'll use a custom field 'activeOrgId' to track the active tenant

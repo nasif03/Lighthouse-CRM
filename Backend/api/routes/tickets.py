@@ -144,6 +144,61 @@ async def get_tickets(
         print(f"Error fetching tickets: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tickets: {str(e)}")
 
+@router.get("/assignable-employees", response_model=list[AssignableEmployeeResponse])
+async def get_assignable_employees(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get list of employees with ticket roles who can be assigned to tickets"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Get organization ID
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
+        
+        # Check if user has ticket role
+        if not has_ticket_role(user_doc, org_id):
+            raise HTTPException(
+                status_code=403, 
+                detail="You do not have permission to view assignable employees."
+            )
+        
+        # Get all users in the organization (optimized query)
+        # Query users that belong to this organization
+        all_users = list(users_collection.find({
+            "$or": [
+                {"orgId": org_id},
+                {"orgId": {"$elemMatch": {"$eq": org_id}}}
+            ]
+        }))
+        
+        # Filter employees with ticket roles
+        assignable_employees = []
+        for emp in all_users:
+            emp_org_ids = emp.get("orgId", [])
+            if isinstance(emp_org_ids, str):
+                emp_org_ids = [emp_org_ids]
+            elif emp_org_ids is None:
+                continue
+            
+            # Verify user belongs to this org and has ticket role
+            if org_id in emp_org_ids and has_ticket_role(emp, org_id):
+                assignable_employees.append(AssignableEmployeeResponse(
+                    id=str(emp["_id"]),
+                    name=emp.get("name", ""),
+                    email=emp.get("email", ""),
+                    picture=emp.get("picture")
+                ))
+        
+        return assignable_employees
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching assignable employees: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch assignable employees: {str(e)}")
+
 @router.get("/{ticket_id}", response_model=TicketResponse)
 async def get_ticket(
     ticket_id: str,
@@ -165,6 +220,10 @@ async def get_ticket(
                 status_code=403, 
                 detail="You do not have permission to view tickets."
             )
+        
+        # Validate ticket_id is a valid ObjectId
+        if not ObjectId.is_valid(ticket_id):
+            raise HTTPException(status_code=400, detail="Invalid ticket ID format")
         
         # Fetch ticket
         ticket = tickets_collection.find_one({
@@ -313,61 +372,6 @@ async def update_ticket(
         print(f"Error updating ticket: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
 
-@router.get("/assignable-employees", response_model=list[AssignableEmployeeResponse])
-async def get_assignable_employees(
-    current_user: dict = Depends(get_current_user)
-):
-    """Get list of employees with ticket roles who can be assigned to tickets"""
-    try:
-        user_doc = current_user.get("user_doc")
-        if not user_doc:
-            raise HTTPException(status_code=404, detail="User not found in database")
-        
-        # Get organization ID
-        user_ids = get_user_ids(user_doc)
-        org_id = user_ids["orgId"]
-        
-        # Check if user has ticket role
-        if not has_ticket_role(user_doc, org_id):
-            raise HTTPException(
-                status_code=403, 
-                detail="You do not have permission to view assignable employees."
-            )
-        
-        # Get all users in the organization (optimized query)
-        # Query users that belong to this organization
-        all_users = list(users_collection.find({
-            "$or": [
-                {"orgId": org_id},
-                {"orgId": {"$elemMatch": {"$eq": org_id}}}
-            ]
-        }))
-        
-        # Filter employees with ticket roles
-        assignable_employees = []
-        for emp in all_users:
-            emp_org_ids = emp.get("orgId", [])
-            if isinstance(emp_org_ids, str):
-                emp_org_ids = [emp_org_ids]
-            elif emp_org_ids is None:
-                continue
-            
-            # Verify user belongs to this org and has ticket role
-            if org_id in emp_org_ids and has_ticket_role(emp, org_id):
-                assignable_employees.append(AssignableEmployeeResponse(
-                    id=str(emp["_id"]),
-                    name=emp.get("name", ""),
-                    email=emp.get("email", ""),
-                    picture=emp.get("picture")
-                ))
-        
-        return assignable_employees
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error fetching assignable employees: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch assignable employees: {str(e)}")
-
 @router.post("", response_model=TicketResponse)
 async def create_ticket(request: CreateTicketRequest):
     """
@@ -401,6 +405,47 @@ async def create_ticket(request: CreateTicketRequest):
         
         result = tickets_collection.insert_one(ticket_data)
         ticket_id = str(result.inserted_id)
+        
+        # Auto-create Jira issue if organization has Jira project
+        try:
+            if org.get("jiraProjectKey"):
+                from services.jira_service import create_jira_issue
+                from config.database import jira_integration_collection
+                
+                project_key = org.get("jiraProjectKey")
+                issue_type = "Task"
+                if request.category == "bug_report":
+                    issue_type = "Bug"
+                elif request.category == "feature_request":
+                    issue_type = "Story"
+                
+                summary = f"[{ticket_number}] {request.subject}"
+                description = f"""Ticket Number: {ticket_number}
+Customer: {request.name} ({request.email})
+Priority: {request.priority or 'medium'}
+Category: {request.category or 'N/A'}
+
+Description:
+{request.description}
+"""
+                
+                issue_info = create_jira_issue(project_key, summary, description, issue_type)
+                if issue_info:
+                    jira_integration_collection.insert_one({
+                        "orgId": request.orgId,
+                        "ticketId": ticket_id,
+                        "jiraIssueKey": issue_info["issueKey"],
+                        "jiraIssueId": issue_info["issueId"],
+                        "jiraProjectKey": project_key,
+                        "syncDirection": "ticket_to_jira",
+                        "status": "active",
+                        "lastSyncedAt": datetime.utcnow(),
+                        "createdAt": datetime.utcnow(),
+                        "updatedAt": datetime.utcnow()
+                    })
+        except Exception as e:
+            print(f"Failed to create Jira issue for ticket: {str(e)}")
+            # Don't fail ticket creation if Jira creation fails
         
         return TicketResponse(
             id=ticket_id,

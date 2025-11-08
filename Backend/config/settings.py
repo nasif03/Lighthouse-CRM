@@ -27,3 +27,8 @@ HOST = os.getenv("HOST", "0.0.0.0")
 # Cache Configuration
 USER_CACHE_TTL_MINUTES = 5
 
+# Jira Configuration
+JIRA_SERVER = os.getenv("JIRA_SERVER", "https://lighthouse-crm.atlassian.net")
+JIRA_EMAIL = os.getenv("JIRA_EMAIL", "niloy.ashraf@northsouth.edu")
+JIRA_TOKEN = os.getenv("JIRA_TOKEN")
+

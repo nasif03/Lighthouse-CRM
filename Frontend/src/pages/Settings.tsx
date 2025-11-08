@@ -15,20 +15,32 @@ type Organization = {
 };
 
 export default function Settings() {
-  const { token } = useAuthStore();
-  const { tenants, activeTenantId, fetchTenants, refreshTenants } = useTenantStore();
+  const { token, user } = useAuthStore();
+  const { tenants, activeTenantId, fetchTenants, refreshTenants, setActiveTenant } = useTenantStore();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [editOrgName, setEditOrgName] = useState('');
+  const [joinOrgName, setJoinOrgName] = useState('');
+  const [joinEmail, setJoinEmail] = useState(user?.email || '');
+  const [isJoining, setIsJoining] = useState(false);
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const activeOrg = organizations.find(org => org.id === activeTenantId);
 
   useEffect(() => {
     loadOrganizations();
+    fetchTenants();
   }, [token]);
+
+  useEffect(() => {
+    if (user?.email && !joinEmail) {
+      setJoinEmail(user.email);
+    }
+  }, [user]);
 
   const loadOrganizations = async () => {
     if (!token) return;
@@ -87,6 +99,43 @@ export default function Settings() {
     setEditOrgName('');
   };
 
+  const handleJoinOrganization = async () => {
+    if (!token || !joinOrgName.trim() || !joinEmail.trim()) return;
+    setIsJoining(true);
+    try {
+      const data = await apiPost<Organization>('/api/organizations/join', token, {
+        email: joinEmail.trim(),
+        organizationName: joinOrgName.trim(),
+      });
+      setOrganizations([...organizations, data]);
+      setJoinOrgName('');
+      setJoinEmail('');
+      setShowJoinForm(false);
+      // Refresh tenant list
+      await refreshTenants();
+      alert('Successfully joined organization!');
+    } catch (error: any) {
+      alert(error.message || 'Failed to join organization');
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleSwitchOrganization = async (orgId: string) => {
+    if (!token || orgId === activeTenantId || !orgId) return;
+    setIsSwitching(true);
+    try {
+      await setActiveTenant(orgId);
+      await loadOrganizations();
+      await fetchTenants();
+      // Reload page to refresh all data with new org context
+      window.location.reload();
+    } catch (error: any) {
+      alert(error.message || 'Failed to switch organization');
+      setIsSwitching(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -94,6 +143,28 @@ export default function Settings() {
         <CardContent>
           {activeOrg ? (
             <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  Switch Organization
+                </label>
+                <select
+                  value={activeTenantId || ''}
+                  onChange={(e) => handleSwitchOrganization(e.target.value)}
+                  disabled={isSwitching || organizations.length <= 1}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} {org.id === activeTenantId ? '(Current)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {organizations.length <= 1 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    You need at least 2 organizations to switch
+                  </p>
+                )}
+              </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">
                   Organization Name
@@ -132,7 +203,29 @@ export default function Settings() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-600">No active organization</p>
+            <div className="space-y-4">
+              <p className="text-gray-600">No active organization</p>
+              {organizations.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    Select an Organization
+                  </label>
+                  <select
+                    value=""
+                    onChange={(e) => handleSwitchOrganization(e.target.value)}
+                    disabled={isSwitching}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select an organization...</option>
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -155,7 +248,51 @@ export default function Settings() {
               >
                 {isCreating ? 'Creating...' : 'Create Organization'}
               </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowJoinForm(!showJoinForm);
+                  if (!showJoinForm && user?.email) {
+                    setJoinEmail(user.email);
+                  }
+                }}
+              >
+                {showJoinForm ? 'Cancel Join' : 'Join Organization'}
+              </Button>
             </div>
+
+            {showJoinForm && (
+              <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    Your Email
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="your.email@example.com"
+                    value={joinEmail}
+                    onChange={(e) => setJoinEmail(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    Organization Name
+                  </label>
+                  <Input
+                    placeholder="Enter organization name to join"
+                    value={joinOrgName}
+                    onChange={(e) => setJoinOrgName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleJoinOrganization()}
+                  />
+                </div>
+                <Button
+                  onClick={handleJoinOrganization}
+                  disabled={!joinOrgName.trim() || !joinEmail.trim() || isJoining}
+                >
+                  {isJoining ? 'Joining...' : 'Join'}
+                </Button>
+              </div>
+            )}
 
             {isLoading ? (
               <p className="text-gray-600">Loading organizations...</p>
@@ -188,20 +325,41 @@ export default function Settings() {
                           </Button>
                         </div>
                       ) : (
-                        <div>
-                          <div className="font-medium text-gray-900">{org.name}</div>
-                          <div className="text-sm text-gray-500">{org.domain}</div>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                              {org.name}
+                              {org.id === activeTenantId && (
+                                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500">{org.domain}</div>
+                          </div>
                         </div>
                       )}
                     </div>
                     {editingOrgId !== org.id && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => startEditing(org)}
-                        size="sm"
-                      >
-                        Edit
-                      </Button>
+                      <div className="flex gap-2">
+                        {org.id !== activeTenantId && (
+                          <Button
+                            variant="primary"
+                            onClick={() => handleSwitchOrganization(org.id)}
+                            disabled={isSwitching}
+                            size="sm"
+                          >
+                            {isSwitching ? 'Switching...' : 'Switch'}
+                          </Button>
+                        )}
+                        <Button
+                          variant="secondary"
+                          onClick={() => startEditing(org)}
+                          size="sm"
+                        >
+                          Edit
+                        </Button>
+                      </div>
                     )}
                   </div>
                 ))}

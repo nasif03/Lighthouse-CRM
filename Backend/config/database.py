@@ -154,7 +154,7 @@ def create_indexes():
         safe_create_index(users_collection, "orgId", name="orgId_idx")
         safe_create_index(users_collection, "activeOrgId", name="activeOrgId_idx")
         safe_create_index(users_collection, "firebaseUid", name="firebaseUid_idx")
-        safe_create_index(users_collection, [("orgId", 1), ("roleIds", 1)], name="orgId_roleIds_idx")
+        safe_create_index(users_collection, "roleIds", name="roleIds_idx")
         
         # Organizations collection indexes
         safe_create_index(organizations_collection, "domain", name="domain_unique", unique=True)
@@ -391,6 +391,14 @@ def update_validators():
 def initialize_database():
     """Initialize database connection and indexes"""
     test_connection()
+    # Drop problematic parallel arrays index if it exists
+    try:
+        indexes = users_collection.index_information()
+        if 'orgId_roleIds_idx' in indexes:
+            users_collection.drop_index('orgId_roleIds_idx')
+            print("[OK] Dropped problematic orgId_roleIds_idx index")
+    except Exception as e:
+        print(f"[WARN] Could not drop orgId_roleIds_idx index: {str(e)}")
     create_indexes()
     update_validators()
 
