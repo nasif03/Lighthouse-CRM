@@ -1,9 +1,9 @@
-import { PropsWithChildren, ReactNode } from 'react';
+import { PropsWithChildren, ReactNode, HTMLAttributes } from 'react';
 
-export function Table({ children }: PropsWithChildren) {
+export function Table({ children, className }: PropsWithChildren<{ className?: string }>) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className={className || "w-full text-sm"}>
         {children}
       </table>
     </div>
@@ -18,16 +18,14 @@ export function TBody({ children }: PropsWithChildren) {
   return <tbody className="divide-y divide-gray-200">{children}</tbody>;
 }
 
-export function TR({ children }: PropsWithChildren) {
-  return <tr className="hover:bg-gray-50">{children}</tr>;
+export function TR({ children, className, onClick }: PropsWithChildren<HTMLAttributes<HTMLTableRowElement>>) {
+  return <tr className={className || "hover:bg-gray-50"} onClick={onClick}>{children}</tr>;
 }
 
-export function TH({ children }: { children: ReactNode }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>;
+export function TH({ children, className }: { children: ReactNode; className?: string }) {
+  return <th className={className || "px-3 py-2 font-medium"}>{children}</th>;
 }
 
-export function TD({ children }: { children: ReactNode }) {
-  return <td className="px-3 py-2">{children}</td>;
+export function TD({ children, className, onClick, colSpan }: { children: ReactNode; className?: string; onClick?: (e: React.MouseEvent) => void; colSpan?: number }) {
+  return <td className={className || "px-3 py-2"} onClick={onClick} colSpan={colSpan}>{children}</td>;
 }
-
-

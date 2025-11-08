@@ -38,3 +38,10 @@ class TicketResponse(BaseModel):
     createdAt: str
     updatedAt: str
 
+class AssignableEmployeeResponse(BaseModel):
+    """Response model for assignable employee"""
+    id: str
+    name: str
+    email: str
+    picture: Optional[str] = None
+

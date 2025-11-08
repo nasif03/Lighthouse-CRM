@@ -75,11 +75,11 @@ export default function Support() {
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (token && activeTenantId) {
+    if (token ) {
       fetchTickets();
       fetchAssignableEmployees();
     }
-  }, [token, activeTenantId]);
+  }, [token]);
 
   const fetchTickets = async () => {
     if (!token) return;
@@ -89,6 +89,9 @@ export default function Support() {
       const data = await apiGet<Ticket[]>('/api/tickets', token);
       setTickets(data);
     } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching tickets:', err);
       setError(err.message || 'Failed to fetch tickets');
     } finally {
@@ -102,6 +105,9 @@ export default function Support() {
       const data = await apiGet<Employee[]>('/api/tickets/assignable-employees', token);
       setEmployees(data);
     } catch (err: any) {
+      if (err.message === 'Request cancelled') {
+        return;
+      }
       console.error('Error fetching assignable employees:', err);
     }
   };

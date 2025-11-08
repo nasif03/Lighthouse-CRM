@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
-from models.ticket import CreateTicketRequest, TicketResponse, UpdateTicketRequest
+from models.ticket import CreateTicketRequest, TicketResponse, UpdateTicketRequest, AssignableEmployeeResponse
 from api.dependencies import get_current_user
 from config.database import tickets_collection, organizations_collection, users_collection, roles_collection
 from utils.query_filters import get_user_ids, build_user_filter
@@ -313,7 +313,7 @@ async def update_ticket(
         print(f"Error updating ticket: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
 
-@router.get("/assignable-employees", response_model=list[dict])
+@router.get("/assignable-employees", response_model=list[AssignableEmployeeResponse])
 async def get_assignable_employees(
     current_user: dict = Depends(get_current_user)
 ):
@@ -354,12 +354,12 @@ async def get_assignable_employees(
             
             # Verify user belongs to this org and has ticket role
             if org_id in emp_org_ids and has_ticket_role(emp, org_id):
-                assignable_employees.append({
-                    "id": str(emp["_id"]),
-                    "name": emp.get("name", ""),
-                    "email": emp.get("email", ""),
-                    "picture": emp.get("picture")
-                })
+                assignable_employees.append(AssignableEmployeeResponse(
+                    id=str(emp["_id"]),
+                    name=emp.get("name", ""),
+                    email=emp.get("email", ""),
+                    picture=emp.get("picture")
+                ))
         
         return assignable_employees
     except HTTPException:

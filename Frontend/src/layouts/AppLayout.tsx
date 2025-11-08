@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { TenantSwitcher } from '../components/TenantSwitcher';
+// import { TenantSwitcher } from '../components/TenantSwitcher';
 import { clsx } from 'clsx';
 import Button from '../components/ui/Button';
 import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin } from '../components/icons';
@@ -22,15 +22,15 @@ const navSections = [
       { to: '/deals', label: 'Deals', icon: IconDeals },
     ]
   },
-  {
-    label: 'Marketing',
-    items: [
-      { to: '/campaigns', label: 'Campaigns', icon: IconCampaigns },
-      { to: '/segments', label: 'Segments', icon: IconSegments },
-      { to: '/templates', label: 'Templates', icon: IconTemplates },
-      { to: '/analytics', label: 'Analytics', icon: IconAnalytics },
-    ]
-  },
+  // {
+  //   label: 'Marketing',
+  //   items: [
+  //     { to: '/campaigns', label: 'Campaigns', icon: IconCampaigns },
+  //     { to: '/segments', label: 'Segments', icon: IconSegments },
+  //     { to: '/templates', label: 'Templates', icon: IconTemplates },
+  //     { to: '/analytics', label: 'Analytics', icon: IconAnalytics },
+  //   ]
+  // },
   {
     label: 'Customer Support',
     items: [
@@ -93,8 +93,8 @@ export default function AppLayout() {
 
       <header className="col-start-2 col-span-2 h-[56px] border-b border-gray-200 bg-white flex items-center gap-3 px-4">
         <div className="text-lg font-semibold tracking-tight w-48 min-w-48 truncate">{title}</div>
-        <div className="mx-3 h-6 w-px bg-gray-200" />
-        <TenantSwitcher />
+        {/* <div className="mx-3 h-6 w-px bg-gray-200" /> */}
+        {/* <TenantSwitcher /> */}
         <div className="ml-auto flex items-center gap-4">
           {user ? (
             <>
