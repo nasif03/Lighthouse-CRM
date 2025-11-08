@@ -118,6 +118,21 @@ async def get_tickets(
             }))
             assigned_users = {str(u["_id"]): u.get("name", "Unknown") for u in users}
         
+        # Get Jira issue info for all tickets
+        from config.database import jira_integration_collection
+        from config.settings import JIRA_SERVER
+        ticket_ids = [str(ticket["_id"]) for ticket in tickets]
+        jira_integrations = list(jira_integration_collection.find({"ticketId": {"$in": ticket_ids}}))
+        jira_map = {}
+        for intg in jira_integrations:
+            ticket_id = intg.get("ticketId")
+            issue_key = intg.get("jiraIssueKey")
+            if ticket_id and issue_key:
+                jira_map[ticket_id] = {
+                    "key": issue_key,
+                    "url": f"{JIRA_SERVER}/browse/{issue_key}"
+                }
+        
         return [
             TicketResponse(
                 id=str(ticket["_id"]),
@@ -133,6 +148,8 @@ async def get_tickets(
                 status=ticket.get("status", "open"),
                 assignedTo=ticket.get("assignedTo"),
                 assignedToName=assigned_users.get(ticket.get("assignedTo")) if ticket.get("assignedTo") else None,
+                jiraIssueKey=jira_map.get(str(ticket["_id"]), {}).get("key"),
+                jiraIssueUrl=jira_map.get(str(ticket["_id"]), {}).get("url"),
                 createdAt=ticket.get("createdAt").isoformat() if ticket.get("createdAt") else "",
                 updatedAt=ticket.get("updatedAt").isoformat() if ticket.get("updatedAt") else ""
             )
@@ -241,6 +258,17 @@ async def get_ticket(
             if assigned_user:
                 assigned_to_name = assigned_user.get("name", "Unknown")
         
+        # Get Jira issue info if linked
+        from config.database import jira_integration_collection
+        jira_issue_key = None
+        jira_issue_url = None
+        jira_integration = jira_integration_collection.find_one({"ticketId": ticket_id})
+        if jira_integration:
+            jira_issue_key = jira_integration.get("jiraIssueKey")
+            if jira_issue_key:
+                from config.settings import JIRA_SERVER
+                jira_issue_url = f"{JIRA_SERVER}/browse/{jira_issue_key}"
+        
         return TicketResponse(
             id=str(ticket["_id"]),
             ticketNumber=ticket.get("ticketNumber", ""),
@@ -255,6 +283,8 @@ async def get_ticket(
             status=ticket.get("status", "open"),
             assignedTo=ticket.get("assignedTo"),
             assignedToName=assigned_to_name,
+            jiraIssueKey=jira_issue_key,
+            jiraIssueUrl=jira_issue_url,
             createdAt=ticket.get("createdAt").isoformat() if ticket.get("createdAt") else "",
             updatedAt=ticket.get("updatedAt").isoformat() if ticket.get("updatedAt") else ""
         )
@@ -349,6 +379,17 @@ async def update_ticket(
             if assigned_user:
                 assigned_to_name = assigned_user.get("name", "Unknown")
         
+        # Get Jira issue info if linked
+        from config.database import jira_integration_collection
+        jira_issue_key = None
+        jira_issue_url = None
+        jira_integration = jira_integration_collection.find_one({"ticketId": ticket_id})
+        if jira_integration:
+            jira_issue_key = jira_integration.get("jiraIssueKey")
+            if jira_issue_key:
+                from config.settings import JIRA_SERVER
+                jira_issue_url = f"{JIRA_SERVER}/browse/{jira_issue_key}"
+        
         return TicketResponse(
             id=str(updated_ticket["_id"]),
             ticketNumber=updated_ticket.get("ticketNumber", ""),
@@ -363,6 +404,8 @@ async def update_ticket(
             status=updated_ticket.get("status", "open"),
             assignedTo=updated_ticket.get("assignedTo"),
             assignedToName=assigned_to_name,
+            jiraIssueKey=jira_issue_key,
+            jiraIssueUrl=jira_issue_url,
             createdAt=updated_ticket.get("createdAt").isoformat() if updated_ticket.get("createdAt") else "",
             updatedAt=updated_ticket.get("updatedAt").isoformat() if updated_ticket.get("updatedAt") else ""
         )
@@ -407,6 +450,8 @@ async def create_ticket(request: CreateTicketRequest):
         ticket_id = str(result.inserted_id)
         
         # Auto-create Jira issue if organization has Jira project
+        jira_issue_key = None
+        jira_issue_url = None
         try:
             if org.get("jiraProjectKey"):
                 from services.jira_service import create_jira_issue
@@ -431,6 +476,8 @@ Description:
                 
                 issue_info = create_jira_issue(project_key, summary, description, issue_type)
                 if issue_info:
+                    jira_issue_key = issue_info["issueKey"]
+                    jira_issue_url = issue_info["issueUrl"]
                     jira_integration_collection.insert_one({
                         "orgId": request.orgId,
                         "ticketId": ticket_id,
@@ -444,7 +491,9 @@ Description:
                         "updatedAt": datetime.utcnow()
                     })
         except Exception as e:
-            print(f"Failed to create Jira issue for ticket: {str(e)}")
+            print(f"Failed to create Jira issue for ticket {ticket_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             # Don't fail ticket creation if Jira creation fails
         
         return TicketResponse(
@@ -461,6 +510,8 @@ Description:
             status="open",
             assignedTo=None,
             assignedToName=None,
+            jiraIssueKey=jira_issue_key,
+            jiraIssueUrl=jira_issue_url,
             createdAt=now.isoformat(),
             updatedAt=now.isoformat()
         )

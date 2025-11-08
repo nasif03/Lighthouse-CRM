@@ -35,6 +35,8 @@ class TicketResponse(BaseModel):
     status: str  # open, in_progress, resolved, closed
     assignedTo: Optional[str] = None  # User ID of assigned agent
     assignedToName: Optional[str] = None  # Name of assigned agent
+    jiraIssueKey: Optional[str] = None  # Jira issue key if linked
+    jiraIssueUrl: Optional[str] = None  # Jira issue URL if linked
     createdAt: str
     updatedAt: str
 

@@ -7,6 +7,8 @@ import Textarea from '../components/ui/Textarea';
 import Select from '../components/ui/Select';
 import FileUpload from '../components/ui/FileUpload';
 import { useAuthStore } from '../store/authStore';
+import { useTenantStore } from '../store/tenantStore';
+import { apiPost } from '../utils/api';
 
 type TicketFormData = {
   subject: string;
@@ -21,12 +23,13 @@ type TicketFormData = {
 
 export default function CreateTicket() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
+  const { activeTenantId } = useTenantStore();
   const [formData, setFormData] = useState<TicketFormData>({
     subject: '',
     description: '',
     category: '',
-    priority: 'Medium',
+    priority: 'medium',
     contactName: user?.name || '',
     contactEmail: user?.email || '',
     contactPhone: '',
@@ -44,6 +47,16 @@ export default function CreateTicket() {
     e.preventDefault();
     setError('');
 
+    if (!token) {
+      setError('You must be logged in to create a ticket');
+      return;
+    }
+
+    if (!activeTenantId) {
+      setError('No active organization. Please select an organization first.');
+      return;
+    }
+
     // Validation
     if (!formData.subject.trim()) {
       setError('Subject is required');
@@ -51,10 +64,6 @@ export default function CreateTicket() {
     }
     if (!formData.description.trim()) {
       setError('Description is required');
-      return;
-    }
-    if (!formData.category) {
-      setError('Category is required');
       return;
     }
     if (!formData.contactEmail.trim()) {
@@ -65,25 +74,44 @@ export default function CreateTicket() {
     setIsSubmitting(true);
 
     try {
-      // TODO: Replace with actual API call
-      // const formDataToSend = new FormData();
-      // Object.entries(formData).forEach(([key, value]) => {
-      //   if (key === 'attachments') {
-      //     formData.attachments.forEach(file => formDataToSend.append('files', file));
-      //   } else {
-      //     formDataToSend.append(key, value as string);
-      //   }
-      // });
-      // const response = await fetch('/api/tickets', { method: 'POST', body: formDataToSend });
+      // Map form data to API format
+      const priorityMap: Record<string, string> = {
+        'Low': 'low',
+        'Medium': 'medium',
+        'High': 'high',
+        'Critical': 'urgent',
+      };
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const categoryMap: Record<string, string> = {
+        'Bug Report': 'bug_report',
+        'Feature Request': 'feature_request',
+        'Technical': 'technical',
+        'Billing': 'billing',
+        'Account': 'account',
+        'Feedback': 'feedback',
+        'Other': 'other',
+      };
 
-      // Navigate to ticket detail or success page
-      navigate('/support', { state: { message: 'Ticket created successfully!' } });
-    } catch (err) {
-      setError('Failed to create ticket. Please try again.');
-      console.error(err);
+      const ticketData = {
+        orgId: activeTenantId,
+        name: formData.contactName,
+        email: formData.contactEmail,
+        phone: formData.contactPhone || undefined,
+        subject: formData.subject,
+        description: formData.description,
+        priority: priorityMap[formData.priority] || formData.priority.toLowerCase() || 'medium',
+        category: categoryMap[formData.category] || formData.category.toLowerCase() || undefined,
+      };
+
+      const response = await apiPost('/api/tickets', token, ticketData);
+      
+      // Navigate to the created ticket
+      navigate(`/support/${response.id}`, { 
+        state: { message: 'Ticket created successfully!' } 
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to create ticket. Please try again.');
+      console.error('Error creating ticket:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -137,22 +165,21 @@ export default function CreateTicket() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-                  Category / Type <span className="text-red-500">*</span>
+                  Category / Type
                 </label>
                 <Select
                   id="category"
                   value={formData.category}
                   onChange={(e) => handleChange('category', e.target.value)}
-                  required
                 >
-                  <option value="">Select category</option>
-                  <option value="Technical">Technical</option>
-                  <option value="Billing">Billing</option>
-                  <option value="Account">Account</option>
-                  <option value="Feature Request">Feature Request</option>
-                  <option value="Bug Report">Bug Report</option>
-                  <option value="Feedback">Feedback</option>
-                  <option value="Other">Other</option>
+                  <option value="">Select category (optional)</option>
+                  <option value="technical">Technical</option>
+                  <option value="billing">Billing</option>
+                  <option value="account">Account</option>
+                  <option value="feature_request">Feature Request</option>
+                  <option value="bug_report">Bug Report</option>
+                  <option value="feedback">Feedback</option>
+                  <option value="other">Other</option>
                 </Select>
               </div>
 
@@ -165,10 +192,10 @@ export default function CreateTicket() {
                   value={formData.priority}
                   onChange={(e) => handleChange('priority', e.target.value)}
                 >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
                 </Select>
               </div>
             </div>
@@ -217,21 +244,6 @@ export default function CreateTicket() {
               </div>
             </div>
 
-            {/* Attachments */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Attachments
-              </label>
-              <FileUpload
-                accept="image/*,.pdf,.doc,.docx,.txt,.log"
-                multiple
-                maxSizeMB={10}
-                onChange={(files) => handleChange('attachments', files)}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Upload screenshots, logs, or documents that may help us understand your issue
-              </p>
-            </div>
 
             {/* Submit Buttons */}
             <div className="flex items-center justify-end gap-3 pt-4 border-t">

@@ -22,6 +22,8 @@ type Ticket = {
   assignedTo: string | null;
   assignedToName: string | null;
   category: string | null;
+  jiraIssueKey?: string | null;
+  jiraIssueUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -346,6 +348,7 @@ export default function Support() {
                     <TH>Customer</TH>
                     <TH>Priority</TH>
                     <TH>Status</TH>
+                    <TH>Jira</TH>
                     <TH>Assigned To</TH>
                     <TH>Created</TH>
                     <TH>Last Updated</TH>
@@ -355,7 +358,7 @@ export default function Support() {
                 <TBody>
                   {filteredTickets.length === 0 ? (
                     <tr>
-                      <TD colSpan={10} className="text-center py-8 text-gray-500">
+                      <TD colSpan={11} className="text-center py-8 text-gray-500">
                         {tickets.length === 0 ? 'No tickets found' : 'No tickets match your filters'}
                       </TD>
                     </tr>
@@ -396,6 +399,24 @@ export default function Support() {
                           <span className={clsx('px-2 py-1 rounded text-xs font-medium', statusColors[ticket.status])}>
                             {statusLabels[ticket.status]}
                           </span>
+                        </TD>
+                        <TD onClick={(e) => e.stopPropagation()}>
+                          {ticket.jiraIssueKey ? (
+                            <a
+                              href={ticket.jiraIssueUrl || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium inline-flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {ticket.jiraIssueKey}
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </TD>
                         <TD>
                           <div className="text-sm">

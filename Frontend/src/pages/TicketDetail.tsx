@@ -8,7 +8,7 @@ import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../store/authStore';
-import { apiGet, apiPut } from '../utils/api';
+import { apiGet, apiPut, apiPost } from '../utils/api';
 
 type Ticket = {
   id: string;
@@ -23,6 +23,8 @@ type Ticket = {
   category: string | null;
   assignedTo: string | null;
   assignedToName: string | null;
+  jiraIssueKey?: string | null;
+  jiraIssueUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -88,6 +90,7 @@ export default function TicketDetail() {
   const [selectedAssignee, setSelectedAssignee] = useState<string>('unassigned');
   const [selectedStatus, setSelectedStatus] = useState<string>('open');
   const [selectedPriority, setSelectedPriority] = useState<string>('medium');
+  const [isCreatingJiraIssue, setIsCreatingJiraIssue] = useState(false);
 
   useEffect(() => {
     if (token && id) {
@@ -160,6 +163,20 @@ export default function TicketDetail() {
       await fetchTicket();
     } catch (err: any) {
       alert(err.message || 'Failed to update ticket priority');
+    }
+  };
+
+  const handleCreateJiraIssue = async () => {
+    if (!token || !id) return;
+    setIsCreatingJiraIssue(true);
+    try {
+      const result = await apiPost(`/api/jira/tickets/${id}/create-issue`, token, {});
+      alert(result.message || 'Jira issue created successfully!');
+      await fetchTicket();
+    } catch (err: any) {
+      alert(err.message || 'Failed to create Jira issue');
+    } finally {
+      setIsCreatingJiraIssue(false);
     }
   };
 
@@ -412,6 +429,44 @@ export default function TicketDetail() {
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
               </Select>
+            </CardContent>
+          </Card>
+
+          {/* Jira Integration */}
+          <Card>
+            <CardHeader>
+              <h3 className="text-sm font-semibold">Jira Integration</h3>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {ticket.jiraIssueKey ? (
+                <div>
+                  <div className="text-gray-500 mb-2">Jira Issue</div>
+                  <a
+                    href={ticket.jiraIssueUrl || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
+                  >
+                    {ticket.jiraIssueKey}
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-gray-500 mb-2">No Jira issue linked</div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleCreateJiraIssue}
+                    disabled={isCreatingJiraIssue}
+                  >
+                    {isCreatingJiraIssue ? 'Creating...' : 'Create Jira Issue'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
