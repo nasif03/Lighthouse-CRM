@@ -11,7 +11,7 @@ const STATUS_OPTIONS = [
   { value: 'contacted', label: 'Contacted', color: 'bg-yellow-50 border-yellow-200' },
   { value: 'qualified', label: 'Qualified', color: 'bg-green-50 border-green-200' },
   { value: 'converted', label: 'Converted', color: 'bg-purple-50 border-purple-200' },
-  { value: 'lost', label: 'Lost', color: 'bg-red-50 border-red-200' },
+  // { value: 'lost', label: 'Lost', color: 'bg-red-50 border-red-200' },
 ];
 
 // Kanban columns (excluding converted - it's a separate column)

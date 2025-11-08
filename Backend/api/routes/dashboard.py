@@ -62,7 +62,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         
         # Leads by status
         leads_by_status = {}
-        for status in ["new", "contacted", "qualified", "converted", "lost"]:
+        for status in ["new", "contacted", "qualified", "converted"]:
             status_filter = {**query_filter, "status": status}
             leads_by_status[status] = leads_collection.count_documents(status_filter)
         

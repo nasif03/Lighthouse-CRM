@@ -73,7 +73,7 @@ const getStatusColor = (status: string): string => {
     contacted: 'bg-yellow-100 text-yellow-700',
     qualified: 'bg-green-100 text-green-700',
     converted: 'bg-purple-100 text-purple-700',
-    lost: 'bg-red-100 text-red-700',
+    // lost: 'bg-red-100 text-red-700',
   };
   return colors[status] || 'bg-gray-100 text-gray-700';
 };
@@ -249,7 +249,7 @@ export default function Dashboard() {
           <CardHeader>Leads by Status</CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {stats?.leadsByStatus && Object.entries(stats.leadsByStatus).map(([status, count]) => (
+            {stats?.leadsByStatus && Object.entries(stats.leadsByStatus).filter(([status]) => status !== 'lost').map(([status, count]) => (
                 <div key={status} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(status)}`}>
