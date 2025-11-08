@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
+from typing import Optional
 from models.ticket import CreateTicketRequest, TicketResponse, UpdateTicketRequest, AssignableEmployeeResponse
 from api.dependencies import get_current_user
 from config.database import tickets_collection, organizations_collection, users_collection, roles_collection
@@ -33,6 +34,18 @@ def generate_ticket_number(org_id: str) -> str:
         next_num = 1
     
     return f"{today_prefix}{next_num:04d}"
+
+def get_assigned_user_name(user_id: Optional[str]) -> Optional[str]:
+    """Get assigned user's name"""
+    if not user_id:
+        return None
+    try:
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            return user.get("name", "Unknown")
+    except:
+        pass
+    return None
 
 def has_ticket_role(user_doc: dict, org_id: str) -> bool:
     """Check if user has ticket-related role (read:tickets or write:tickets permission)"""
@@ -96,8 +109,18 @@ async def get_tickets(
                 detail="You do not have permission to view tickets. Contact your administrator to assign you a role with ticket permissions."
             )
         
+        # Check if user is admin
+        from api.routes.organizations import is_org_admin
+        user_is_admin = is_org_admin(user_doc, org_id)
+        user_id = str(user_doc["_id"])
+        
         # Build query filter
         query = {"orgId": org_id}
+        
+        # Employees can only see tickets assigned to them
+        # Admins can see all tickets
+        if not user_is_admin:
+            query["assignedTo"] = user_id
         
         if status:
             query["status"] = status
@@ -160,6 +183,29 @@ async def get_tickets(
     except Exception as e:
         print(f"Error fetching tickets: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tickets: {str(e)}")
+
+@router.get("/check-admin", response_model=dict)
+async def check_admin(
+    current_user: dict = Depends(get_current_user)
+):
+    """Check if current user is admin of their organization"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
+        
+        from api.routes.organizations import is_org_admin
+        user_is_admin = is_org_admin(user_doc, org_id)
+        
+        return {"isAdmin": user_is_admin}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error checking admin status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to check admin status: {str(e)}")
 
 @router.get("/assignable-employees", response_model=list[AssignableEmployeeResponse])
 async def get_assignable_employees(
@@ -242,6 +288,11 @@ async def get_ticket(
         if not ObjectId.is_valid(ticket_id):
             raise HTTPException(status_code=400, detail="Invalid ticket ID format")
         
+        # Check if user is admin
+        from api.routes.organizations import is_org_admin
+        user_is_admin = is_org_admin(user_doc, org_id)
+        user_id = str(user_doc["_id"])
+        
         # Fetch ticket
         ticket = tickets_collection.find_one({
             "_id": ObjectId(ticket_id),
@@ -250,6 +301,14 @@ async def get_ticket(
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Employees can only view tickets assigned to them
+        if not user_is_admin:
+            if ticket.get("assignedTo") != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only view tickets assigned to you."
+                )
         
         # Get assigned user name if assigned
         assigned_to_name = None
@@ -317,6 +376,11 @@ async def update_ticket(
                 detail="You do not have permission to update tickets."
             )
         
+        # Check if user is admin (only admins can assign tickets)
+        from api.routes.organizations import is_org_admin
+        user_is_admin = is_org_admin(user_doc, org_id)
+        user_id = str(user_doc["_id"])
+        
         # Fetch ticket
         ticket = tickets_collection.find_one({
             "_id": ObjectId(ticket_id),
@@ -326,8 +390,29 @@ async def update_ticket(
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         
-        # Validate assignedTo if provided
-        if request.assignedTo:
+        # Employees can only update tickets assigned to them (unless they're admin)
+        if not user_is_admin:
+            if ticket.get("assignedTo") != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only update tickets assigned to you."
+                )
+            # Employees cannot change assignment
+            if request.assignedTo is not None and request.assignedTo != ticket.get("assignedTo"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only administrators can assign or reassign tickets."
+                )
+        
+        # Only admins can assign tickets
+        if request.assignedTo is not None and not user_is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="Only administrators can assign or reassign tickets."
+            )
+        
+        # Validate assignedTo if provided (admin only)
+        if request.assignedTo and user_is_admin:
             # Verify the employee exists
             employee = users_collection.find_one({"_id": ObjectId(request.assignedTo)})
             
@@ -449,6 +534,21 @@ async def create_ticket(request: CreateTicketRequest):
         result = tickets_collection.insert_one(ticket_data)
         ticket_id = str(result.inserted_id)
         
+        # Auto-assign ticket to an employee with ticket role
+        assigned_employee_id = None
+        try:
+            from services.ticket_assignment import auto_assign_ticket
+            assigned_employee_id = auto_assign_ticket(request.orgId, ticket_id)
+            if assigned_employee_id:
+                tickets_collection.update_one(
+                    {"_id": ObjectId(ticket_id)},
+                    {"$set": {"assignedTo": assigned_employee_id, "updatedAt": datetime.utcnow()}}
+                )
+                ticket_data["assignedTo"] = assigned_employee_id
+        except Exception as e:
+            print(f"Failed to auto-assign ticket {ticket_id}: {str(e)}")
+            # Don't fail ticket creation if auto-assignment fails
+        
         # Auto-create Jira issue if organization has Jira project
         jira_issue_key = None
         jira_issue_url = None
@@ -496,6 +596,9 @@ Description:
             traceback.print_exc()
             # Don't fail ticket creation if Jira creation fails
         
+        # Get assigned user name
+        assigned_to_name = get_assigned_user_name(assigned_employee_id) if assigned_employee_id else None
+        
         return TicketResponse(
             id=ticket_id,
             ticketNumber=ticket_number,
@@ -508,8 +611,8 @@ Description:
             priority=request.priority or "medium",
             category=request.category,
             status="open",
-            assignedTo=None,
-            assignedToName=None,
+            assignedTo=assigned_employee_id,
+            assignedToName=assigned_to_name,
             jiraIssueKey=jira_issue_key,
             jiraIssueUrl=jira_issue_url,
             createdAt=now.isoformat(),

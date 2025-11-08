@@ -75,13 +75,32 @@ export default function Support() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    if (token ) {
+    if (token) {
       fetchTickets();
-      fetchAssignableEmployees();
+      checkAdminStatus();
+      // Only fetch assignable employees if admin
+      checkAdminStatus().then(admin => {
+        if (admin) {
+          fetchAssignableEmployees();
+        }
+      });
     }
   }, [token]);
+
+  const checkAdminStatus = async (): Promise<boolean> => {
+    if (!token) return false;
+    try {
+      const data = await apiGet<{ isAdmin: boolean }>('/api/tickets/check-admin', token);
+      setIsAdmin(data.isAdmin);
+      return data.isAdmin;
+    } catch (err: any) {
+      console.error('Error checking admin status:', err);
+      return false;
+    }
+  };
 
   const fetchTickets = async () => {
     if (!token) return;
@@ -438,21 +457,25 @@ export default function Support() {
                             >
                               View
                             </Button>
-                            <Select
-                              value={ticket.assignedTo || 'unassigned'}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                const employeeId = e.target.value === 'unassigned' ? null : e.target.value;
-                                handleAssignTicket(ticket.id, employeeId);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-xs"
-                            >
-                              <option value="unassigned">Unassigned</option>
-                              {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>{emp.name}</option>
-                              ))}
-                            </Select>
+                            {isAdmin ? (
+                              <Select
+                                value={ticket.assignedTo || 'unassigned'}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const employeeId = e.target.value === 'unassigned' ? null : e.target.value;
+                                  handleAssignTicket(ticket.id, employeeId);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs"
+                              >
+                                <option value="unassigned">Unassigned</option>
+                                {employees.map(emp => (
+                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                ))}
+                              </Select>
+                            ) : (
+                              <span className="text-xs text-gray-500">—</span>
+                            )}
                           </div>
                         </TD>
                       </TR>

@@ -12,3 +12,4 @@ httpx==0.25.2
 PyJWT==2.8.0
 jira==3.10.5
 requests==2.31.0
+pydantic[email]==2.5.0

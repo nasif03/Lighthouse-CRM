@@ -91,13 +91,32 @@ export default function TicketDetail() {
   const [selectedStatus, setSelectedStatus] = useState<string>('open');
   const [selectedPriority, setSelectedPriority] = useState<string>('medium');
   const [isCreatingJiraIssue, setIsCreatingJiraIssue] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (token && id) {
       fetchTicket();
-      fetchAssignableEmployees();
+      checkAdminStatus();
+      // Only fetch assignable employees if admin
+      checkAdminStatus().then(admin => {
+        if (admin) {
+          fetchAssignableEmployees();
+        }
+      });
     }
   }, [token, id]);
+
+  const checkAdminStatus = async (): Promise<boolean> => {
+    if (!token) return false;
+    try {
+      const data = await apiGet<{ isAdmin: boolean }>('/api/tickets/check-admin', token);
+      setIsAdmin(data.isAdmin);
+      return data.isAdmin;
+    } catch (err: any) {
+      console.error('Error checking admin status:', err);
+      return false;
+    }
+  };
 
   const fetchTicket = async () => {
     if (!token || !id) return;
@@ -276,14 +295,16 @@ export default function TicketDetail() {
                     <span>Last updated: {formatDateTime(ticket.updatedAt)}</span>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setShowStatusModal(true)}>
-                    Change Status
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => setShowAssignModal(true)}>
-                    Assign
-                  </Button>
-                </div>
+                      <div className="flex gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => setShowStatusModal(true)}>
+                          Change Status
+                        </Button>
+                        {isAdmin && (
+                          <Button variant="secondary" size="sm" onClick={() => setShowAssignModal(true)}>
+                            Assign
+                          </Button>
+                        )}
+                      </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -402,15 +423,17 @@ export default function TicketDetail() {
             <CardHeader>
               <h3 className="text-sm font-semibold">Assignment</h3>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div>
-                <div className="text-gray-500">Assigned To</div>
-                <div className="font-medium">{ticket.assignedToName || 'Unassigned'}</div>
-              </div>
-              <Button variant="secondary" size="sm" className="w-full mt-2" onClick={() => setShowAssignModal(true)}>
-                Reassign
-              </Button>
-            </CardContent>
+                  <CardContent className="space-y-2 text-sm">
+                    <div>
+                      <div className="text-gray-500">Assigned To</div>
+                      <div className="font-medium">{ticket.assignedToName || 'Unassigned'}</div>
+                    </div>
+                    {isAdmin && (
+                      <Button variant="secondary" size="sm" className="w-full mt-2" onClick={() => setShowAssignModal(true)}>
+                        Reassign
+                      </Button>
+                    )}
+                  </CardContent>
           </Card>
 
           {/* Priority */}
