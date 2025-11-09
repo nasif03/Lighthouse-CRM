@@ -22,10 +22,14 @@ if (getApps().length === 0) {
 // Initialize Firebase Auth and get a reference to the service
 export const auth: Auth = getAuth(app);
 
-// Initialize Google Auth Provider
+// Initialize Google Auth Provider with Gmail scopes
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.modify');
 googleProvider.setCustomParameters({
-  prompt: 'select_account'
+  prompt: 'consent', // Force consent to get refresh token
+  access_type: 'offline'
 });
 
 export default app;

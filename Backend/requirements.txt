@@ -6,6 +6,7 @@ firebase-admin==6.4.0
 google-auth==2.25.2
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
+google-api-python-client==2.108.0
 python-multipart==0.0.6
 pydantic==2.5.0
 httpx==0.25.2

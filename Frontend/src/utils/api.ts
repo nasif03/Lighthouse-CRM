@@ -21,24 +21,46 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { skipCache = false, cacheKey, ...fetchOptions } = options;
   const url = `${API_BASE_URL}${endpoint}`;
-  const key = cacheKey || `${fetchOptions.method || 'GET'}:${endpoint}`;
+  
+  // Create a more unique key that includes auth token hash to avoid conflicts
+  // For GET requests, use cache key if provided, otherwise create one
+  // For POST/PUT/DELETE, always use a unique key to avoid cancellation
+  const authHeader = fetchOptions.headers?.['Authorization'] as string || '';
+  const authHash = authHeader ? authHeader.substring(0, 20) : 'no-auth';
+  const method = fetchOptions.method || 'GET';
+  
+  // For GET requests, allow sharing cache key
+  // For other methods, make key unique to prevent cancellation
+  // If cacheKey is provided, use it directly (caller knows what they're doing)
+  const key = cacheKey || (method === 'GET' 
+    ? `${method}:${endpoint}:${authHash}` 
+    : `${method}:${endpoint}:${authHash}:${Date.now()}-${Math.random()}`);
 
-  // Cancel previous request with same key
-  if (abortControllers.has(key)) {
-    abortControllers.get(key)?.abort();
-  }
-
-  // Check cache first (only for GET requests)
-  if (!skipCache && fetchOptions.method === undefined || fetchOptions.method === 'GET') {
+  // Check cache first (only for GET requests) - do this before creating controller
+  if (!skipCache && method === 'GET') {
     const cached = requestCache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.data as T;
     }
   }
 
-  // Create new abort controller
+  // For GET requests, allow concurrent requests - they're idempotent
+  // Only cancel if it's a POST/PUT/DELETE with the exact same key (shouldn't happen)
+  // Don't store abort controllers for GET requests to avoid conflicts
   const controller = new AbortController();
-  abortControllers.set(key, controller);
+  
+  // Only track abort controllers for non-GET requests or when using explicit cache key
+  // This prevents GET requests from cancelling each other
+  if (method !== 'GET' || cacheKey) {
+    const existingController = abortControllers.get(key);
+    if (existingController) {
+      // Only abort if it's a non-GET request or explicit cache key (intentional duplicate)
+      if (method !== 'GET' || cacheKey) {
+        existingController.abort();
+      }
+    }
+    abortControllers.set(key, controller);
+  }
 
   try {
     const response = await fetch(url, {
@@ -50,8 +72,10 @@ export async function apiRequest<T>(
       },
     });
 
-    // Remove abort controller on completion
-    abortControllers.delete(key);
+    // Remove abort controller on completion (if it was stored)
+    if (method !== 'GET' || cacheKey) {
+      abortControllers.delete(key);
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -61,16 +85,34 @@ export async function apiRequest<T>(
     const data = await response.json();
 
     // Cache GET requests
-    if (!skipCache && (fetchOptions.method === undefined || fetchOptions.method === 'GET')) {
+    if (!skipCache && method === 'GET') {
       requestCache.set(key, { data, timestamp: Date.now() });
     }
 
     return data as T;
   } catch (error: any) {
-    abortControllers.delete(key);
+    // Remove abort controller on error (if it was stored)
+    if (method !== 'GET' || cacheKey) {
+      abortControllers.delete(key);
+    }
     
-    // Don't throw error if request was aborted
-    if (error.name === 'AbortError') {
+    // Handle abort error more gracefully
+    if (error.name === 'AbortError' || error.message === 'The user aborted a request.') {
+      // For aborted GET requests, check if we can return cached data
+      if (method === 'GET' && !skipCache) {
+        // Try to get cached data without the timestamp/random part
+        const baseKey = key.split(':').slice(0, -1).join(':'); // Remove last part
+        const cached = requestCache.get(baseKey);
+        if (cached) {
+          return cached.data as T;
+        }
+        // Try the original key
+        const originalCached = requestCache.get(key);
+        if (originalCached) {
+          return originalCached.data as T;
+        }
+      }
+      // Only throw error if we can't use cache
       throw new Error('Request cancelled');
     }
     
