@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import Button from '../components/ui/Button';
 import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin } from '../components/icons';
 import InboxPanel from '../components/inbox/InboxPanel';
+import GmailPanel from '../components/gmail/GmailPanel';
 
 // Navigation sections for business owner organization
 const navSections = [
@@ -119,9 +120,14 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Inbox Panel on the right - integrated into main background */}
-      <div className="col-start-3 row-span-2 h-full bg-white border-l border-gray-200">
-        <InboxPanel />
+      {/* Inbox Panel and Gmail Panel on the right - integrated into main background */}
+      <div className="col-start-3 row-span-2 h-full bg-white border-l border-gray-200 flex flex-col">
+        <div className="flex-1 border-b border-gray-200">
+          <InboxPanel />
+        </div>
+        <div className="flex-1">
+          <GmailPanel />
+        </div>
       </div>
     </div>
   );

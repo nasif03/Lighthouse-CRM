@@ -31,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       import('./tenantStore').then(({ useTenantStore }) => {
         useTenantStore.getState().fetchTenants();
       });
+      // Don't check Gmail auth status automatically - user will click "Connect Gmail" manually
     }
   },
   
@@ -51,6 +52,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       
+      // Get OAuth credential for Gmail access
+      const credential = googleProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken;
+      const oauthIdToken = credential?.idToken;
+      
       // Verify token with backend and get user info
       const data = await apiPost<{ user: NonNullable<User>; token: string }>(
         '/api/auth/verify-token',
@@ -60,6 +66,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
       
       get().login(data.user, data.token);
+      
+      // Check Gmail auth status after login (will be checked in login function)
+      // Gmail connection happens separately via Gmail OAuth flow if needed
     } catch (error: any) {
       console.error('Sign in error:', error);
       set({ isLoading: false });
@@ -100,18 +109,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const idToken = await firebaseUser.getIdToken();
           
           // Verify token with backend
+          // POST requests automatically get unique keys, so no cancellation issues
           const data = await apiPost<{ user: NonNullable<User>; token: string }>(
             '/api/auth/verify-token',
             null,
             { id_token: idToken },
-            { skipCache: true }
+            { 
+              skipCache: true
+            }
           );
           
           get().login(data.user, data.token);
-        } catch (error) {
-          console.error('Auth initialization error:', error);
-          localStorage.removeItem('auth_token');
-          set({ user: null, token: null, isLoading: false });
+        } catch (error: any) {
+          // Don't log cancellation errors during initialization
+          if (!error.message?.includes('Request cancelled')) {
+            console.error('Auth initialization error:', error);
+          }
+          // Only clear auth if it's a real error, not cancellation
+          if (error.message && !error.message.includes('Request cancelled')) {
+            localStorage.removeItem('auth_token');
+            set({ user: null, token: null, isLoading: false });
+          } else {
+            // For cancellation, just set loading to false - retry will happen
+            set({ isLoading: false });
+          }
         }
       } else {
         localStorage.removeItem('auth_token');
