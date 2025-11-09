@@ -135,4 +135,6 @@ coverage/
 *.seed
 *.pid.lock
 
-client_secret.json
+Backend/client_secret.json
+Backend/token/*
+Backend/twil.txt

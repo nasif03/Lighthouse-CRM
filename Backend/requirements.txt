@@ -14,3 +14,4 @@ PyJWT==2.8.0
 jira==3.10.5
 requests==2.31.0
 pydantic[email]==2.5.0
+twilio==8.10.0

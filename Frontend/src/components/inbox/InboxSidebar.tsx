@@ -1,6 +1,9 @@
 import { useInboxStore, Conversation } from '../../store/inboxStore';
 import { useTenantStore } from '../../store/tenantStore';
+import { useAuthStore } from '../../store/authStore';
+import { useTwilioStore } from '../../store/twilioStore';
 import { clsx } from 'clsx';
+import { useState } from 'react';
 
 function formatTime(date: Date): string {
   const now = new Date();
@@ -58,9 +61,29 @@ function ConversationItem({ conversation }: { conversation: Conversation }) {
 export default function InboxSidebar() {
   const { conversations } = useInboxStore();
   const { activeTenantId } = useTenantStore();
+  const { token } = useAuthStore();
+  const { makeCall, isLoading } = useTwilioStore();
+  const [callStatus, setCallStatus] = useState<string | null>(null);
 
-  const handleTopCall = () => {
-    alert('Global call icon: integrate with VoIP provider here.');
+  const handleTopCall = async () => {
+    if (!token) {
+      alert('Please login to make calls');
+      return;
+    }
+
+    // Always call the hardcoded allowed number
+    const allowedNumber = '+8801957128594';
+    
+    try {
+      setCallStatus('Calling...');
+      await makeCall(token, allowedNumber, 'Hello, this is a call from Lighthouse CRM.');
+      setCallStatus('Call initiated');
+      setTimeout(() => setCallStatus(null), 3000);
+    } catch (err: any) {
+      console.error('Call error:', err);
+      alert(`Failed to make call: ${err.message || 'Unknown error'}`);
+      setCallStatus(null);
+    }
   };
 
   return (
@@ -70,15 +93,26 @@ export default function InboxSidebar() {
           <h2 className="text-lg font-semibold">Inbox</h2>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Tenant: {activeTenantId}</span>
-            {/* <button
+            <button
               onClick={handleTopCall}
-              className="w-8 h-8 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center"
-              title="Call"
+              disabled={isLoading || !token}
+              className="w-8 h-8 rounded-md bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
+              title="Call +8801957128594"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </button> */}
+              {isLoading ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              )}
+            </button>
+            {callStatus && (
+              <span className="text-xs text-gray-600">{callStatus}</span>
+            )}
           </div>
         </div>
       </div>
