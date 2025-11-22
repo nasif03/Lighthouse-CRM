@@ -138,3 +138,6 @@ coverage/
 Backend/client_secret.json
 Backend/token/*
 Backend/twil.txt
+Backend/try_fireflies/
+Backend/try_gmail/
+Backend/try_jira/
