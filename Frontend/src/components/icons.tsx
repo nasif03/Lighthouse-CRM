@@ -96,4 +96,18 @@ export function IconAdmin(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconFireflies(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12 3l1.902 4.848 5.198.402-4.01 3.42 1.23 5.03L12 13.98l-4.32 2.72 1.23-5.03-4.01-3.42 5.198-.401z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
 
