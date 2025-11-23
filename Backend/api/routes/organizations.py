@@ -195,23 +195,34 @@ async def create_organization(
         result = organizations_collection.insert_one(org_data)
         org_id = str(result.inserted_id)
         
-        # Create Jira project for the organization
+        # Create JSM Service Project for the organization
         try:
-            from services.jira_service import create_jira_project
+            from services.jira_service import create_jsm_service_project
             admin_email = user_doc.get("email")
-            project_info = create_jira_project(request.name, org_id, admin_email)
+            print(f"Creating JSM project for organization: {request.name}, admin: {admin_email}")
+            project_info = create_jsm_service_project(request.name, org_id, admin_email)
             if project_info:
+                print(f"JSM project created successfully: {project_info.get('projectKey')}")
+                update_data = {
+                    "jiraProjectKey": project_info["projectKey"],
+                    "jiraProjectId": project_info["projectId"],
+                    "updatedAt": now
+                }
+                # Add service desk ID if available
+                if project_info.get("serviceDeskId"):
+                    update_data["jsmServiceDeskId"] = project_info["serviceDeskId"]
+                
                 organizations_collection.update_one(
                     {"_id": ObjectId(org_id)},
-                    {"$set": {
-                        "jiraProjectKey": project_info["projectKey"],
-                        "jiraProjectId": project_info["projectId"],
-                        "updatedAt": now
-                    }}
+                    {"$set": update_data}
                 )
+            else:
+                print(f"WARNING: JSM project creation returned None for organization: {request.name}")
         except Exception as e:
-            print(f"Failed to create Jira project for organization: {str(e)}")
-            # Don't fail org creation if Jira creation fails
+            print(f"ERROR: Failed to create JSM project for organization: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail org creation if JSM creation fails
         
         # Update user's orgId to include this new org
         # Support both array and string formats

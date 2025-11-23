@@ -14,9 +14,7 @@ contacts_collection = db.contacts
 accounts_collection = db.accounts
 deals_collection = db.deals
 activities_collection = db.activities
-tickets_collection = db.tickets
 roles_collection = db.roles
-ticket_comments_collection = db.ticketComments
 conversations_collection = db.conversations
 messages_collection = db.messages
 campaigns_collection = db.campaigns
@@ -30,6 +28,7 @@ reports_collection = db.reports
 exports_collection = db.exports
 audit_collection = db.audit
 jira_integration_collection = db.jiraIntegration
+ticket_metadata_collection = db.ticketMetadata
 
 def test_connection():
     """Test MongoDB connection"""
@@ -196,21 +195,6 @@ def create_indexes():
         safe_create_index(deals_collection, [("orgId", 1), ("stageId", 1)], name="deals_orgId_stageId_idx")
         safe_create_index(deals_collection, [("orgId", 1), ("closeDate", 1)], name="deals_orgId_closeDate_idx")
         
-        # Tickets collection indexes
-        safe_create_index(tickets_collection, "ticketNumber", name="tickets_ticketNumber_unique", unique=True)
-        safe_create_index(tickets_collection, "orgId", name="tickets_orgId_idx")
-        safe_create_index(tickets_collection, [("orgId", 1), ("status", 1)], name="tickets_orgId_status_idx")
-        safe_create_index(tickets_collection, [("orgId", 1), ("createdAt", -1)], name="tickets_orgId_createdAt_idx")
-        safe_create_index(tickets_collection, [("orgId", 1), ("assignedTo", 1)], name="tickets_orgId_assignedTo_idx")
-        safe_create_index(tickets_collection, [("orgId", 1), ("priority", 1)], name="tickets_orgId_priority_idx")
-        safe_create_index(tickets_collection, [("orgId", 1), ("email", 1)], name="tickets_orgId_email_idx")
-        safe_create_index(tickets_collection, "email", name="tickets_email_idx")
-        
-        # Ticket Comments collection indexes
-        safe_create_index(ticket_comments_collection, "ticketId", name="ticketComments_ticketId_idx")
-        safe_create_index(ticket_comments_collection, [("orgId", 1), ("ticketId", 1)], name="ticketComments_orgId_ticketId_idx")
-        safe_create_index(ticket_comments_collection, [("ticketId", 1), ("createdAt", -1)], name="ticketComments_ticketId_createdAt_idx")
-        
         # Conversations collection indexes
         safe_create_index(conversations_collection, "orgId", name="conversations_orgId_idx")
         safe_create_index(conversations_collection, [("orgId", 1), ("updatedAt", -1)], name="conversations_orgId_updatedAt_idx")
@@ -289,6 +273,11 @@ def create_indexes():
         safe_create_index(jira_integration_collection, "jiraIssueKey", name="jiraIntegration_jiraIssueKey_unique", unique=True)
         safe_create_index(jira_integration_collection, "orgId", name="jiraIntegration_orgId_idx")
         safe_create_index(jira_integration_collection, [("orgId", 1), ("ticketId", 1)], name="jiraIntegration_orgId_ticketId_idx")
+        
+        # Ticket Metadata collection indexes (stores customer info for JSM tickets)
+        safe_create_index(ticket_metadata_collection, "jsmIssueKey", name="ticketMetadata_jsmIssueKey_unique", unique=True)
+        safe_create_index(ticket_metadata_collection, "orgId", name="ticketMetadata_orgId_idx")
+        safe_create_index(ticket_metadata_collection, [("orgId", 1), ("jsmIssueKey", 1)], name="ticketMetadata_orgId_jsmIssueKey_idx")
         
         print("[OK] Database indexes created successfully")
     except Exception as e:
