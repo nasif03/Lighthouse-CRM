@@ -1,9 +1,23 @@
 """Database connection and setup"""
 from pymongo import MongoClient
 from config.settings import MONGO_URI
+import certifi
+
+# MongoDB connection with proper SSL/TLS configuration
+# Connection parameters for better compatibility with MongoDB Atlas
+connection_kwargs = {
+    'serverSelectionTimeoutMS': 30000,
+    'connectTimeoutMS': 30000,
+    'socketTimeoutMS': 30000,
+    'tls': True,
+    'tlsCAFile': certifi.where(),
+    'tlsAllowInvalidCertificates': False,
+}
 
 # MongoDB connection
-mongo_client = MongoClient(MONGO_URI)
+# For mongodb+srv:// connections, SSL/TLS is automatically enabled
+# Explicitly setting TLS parameters ensures proper certificate validation
+mongo_client = MongoClient(MONGO_URI, **connection_kwargs)
 db = mongo_client.lighthousecrm
 
 # Collections
