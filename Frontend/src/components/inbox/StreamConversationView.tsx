@@ -3,10 +3,9 @@ import { useStreamChat } from '../../hooks/useStreamChat';
 import { useInboxStore } from '../../store/inboxStore';
 import { useAuthStore } from '../../store/authStore';
 import { Channel, MessageInput, Window, useChannelStateContext, useChannelActionContext } from 'stream-chat-react';
-import { useJitsiStore } from '../../store/jitsiStore';
-import JitsiCall from '../jitsi/JitsiCall';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
+import StreamAudioCallButton from './calls/StreamAudioCallButton';
 
 // Custom message component to match CRM design
 function CustomMessage({ message }: { message: any }) {
@@ -33,16 +32,19 @@ function CustomMessage({ message }: { message: any }) {
 
 // Custom message list
 function CustomMessageList() {
-  const { messages } = useChannelStateContext();
+  const channelState = useChannelStateContext() as { messages?: any[] };
+  const messages = channelState.messages ?? [];
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const safeMessages = messages || [];
+
   return (
     <div className="flex-1 overflow-y-auto p-4">
-      {messages.map((message: any) => (
+      {safeMessages.map((message: any) => (
         <CustomMessage key={message.id} message={message} />
       ))}
       <div ref={messagesEndRef} />
@@ -91,56 +93,6 @@ function CustomMessageInput() {
   );
 }
 
-function JitsiCallButton({ 
-  participantId, 
-  participantName 
-}: { 
-  participantId: string; 
-  participantName: string;
-}) {
-  const { token, user } = useAuthStore();
-  const { startCall, endCall, isCallActive, currentRoom } = useJitsiStore();
-  const [showCall, setShowCall] = useState(false);
-
-  const handleStartCall = () => {
-    if (!token || !user?.id) {
-      alert('Please login to make calls');
-      return;
-    }
-
-    const roomName = startCall(user.id, participantId);
-    setShowCall(true);
-  };
-
-  const handleEndCall = () => {
-    endCall();
-    setShowCall(false);
-  };
-
-  return (
-    <>
-      <button
-        onClick={handleStartCall}
-        disabled={isCallActive || !token}
-        className="w-9 h-9 rounded-md bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
-        title={`Call ${participantName}`}
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-        </svg>
-      </button>
-      
-      {showCall && currentRoom && (
-        <JitsiCall
-          roomName={currentRoom}
-          userName={user?.name || 'You'}
-          onEndCall={handleEndCall}
-        />
-      )}
-    </>
-  );
-}
-
 export default function StreamConversationView() {
   // ALL HOOKS MUST BE CALLED AT THE TOP - BEFORE ANY CONDITIONAL RETURNS
   const { client, isLoading: chatLoading } = useStreamChat();
@@ -183,7 +135,7 @@ export default function StreamConversationView() {
     });
 
     setChannelError(null);
-    const newChannel = client.channel(conversation.channelType, conversation.channelId);
+    const newChannel = client.channel(conversation.channelType!, conversation.channelId!);
     
     // Set a timeout for channel watch
     const timeout = setTimeout(() => {
@@ -243,7 +195,7 @@ export default function StreamConversationView() {
   
   // Get other participant info
   const otherMember = conversation.participantName || 'Unknown';
-  const otherMemberAvatar = conversation.participantAvatar || otherMember[0];
+  const callTargetId = conversation.channelId || conversation.id || '';
 
   if (!channel) {
     return (
@@ -295,9 +247,10 @@ export default function StreamConversationView() {
             <p className="text-xs text-gray-500">Online</p>
           </div>
         </div>
-        <JitsiCallButton 
+        <StreamAudioCallButton
           participantId={conversation.participantId}
           participantName={conversation.participantName}
+          conversationId={callTargetId}
         />
       </div>
 
