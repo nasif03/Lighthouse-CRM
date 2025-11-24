@@ -37,3 +37,9 @@ STREAM_CHAT_API_KEY = os.getenv("STREAM_CHAT_API_KEY", "n8nh34grh4b3")
 STREAM_CHAT_API_SECRET = os.getenv("STREAM_CHAT_API_SECRET", "hydg2yrmqfktv4d4xauv7s9g5mebtsmn2a9nt3byw85vaxdu5sdkdyzx3kydmnsq")
 STREAM_CHAT_APP_ID = os.getenv("STREAM_CHAT_APP_ID", "1451679")
 
+# Support AI / in-app assistant configuration
+SUPPORT_AI_API_KEY = os.getenv("SUPPORT_AI_API_KEY")
+SUPPORT_AI_MODEL = os.getenv("SUPPORT_AI_MODEL", "gpt-4o-mini")
+SUPPORT_AI_BASE_URL = os.getenv("SUPPORT_AI_BASE_URL", "https://api.openai.com/v1")
+SUPPORT_AI_SYSTEM_PROMPT = os.getenv("SUPPORT_AI_SYSTEM_PROMPT")
+

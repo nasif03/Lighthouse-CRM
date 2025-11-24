@@ -8,7 +8,7 @@ import uvicorn
 from config.settings import CORS_ORIGINS, PORT, HOST
 from config.database import initialize_database
 from services.firebase import initialize_firebase
-from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard, organizations, employees, roles, jira, gmail, twilio, chat
+from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard, organizations, employees, roles, jira, gmail, twilio, chat, support_chat
 from api.routes.fireflies_routes import router as fireflies_router
 from api.routes import calendar_routes
 
@@ -62,6 +62,7 @@ app.include_router(twilio.router)
 app.include_router(fireflies_router)
 app.include_router(calendar_routes.router)
 app.include_router(chat.router)
+app.include_router(support_chat.router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host=HOST, port=PORT)

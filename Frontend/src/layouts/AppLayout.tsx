@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 // import { TenantSwitcher } from '../components/TenantSwitcher';
 import { clsx } from 'clsx';
 import Button from '../components/ui/Button';
-import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies } from '../components/icons';
+import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies, IconAssistant } from '../components/icons';
 import InboxPanel from '../components/inbox/InboxPanel';
 import GmailPanel from '../components/gmail/GmailPanel';
 
@@ -42,6 +42,7 @@ const navSections = [
     label: 'AI Insights',
     items: [
       { to: '/fireflies', label: 'Fireflies AI', icon: IconFireflies },
+      { to: '/support-ai', label: 'Support AI', icon: IconAssistant },
     ]
   },
   {
@@ -127,11 +128,11 @@ export default function AppLayout() {
       </main>
 
       {/* Inbox Panel and Gmail Panel on the right - integrated into main background */}
-      <div className="col-start-3 row-span-2 h-full bg-white border-l border-gray-200 flex flex-col">
-        <div className="flex-1 border-b border-gray-200">
+      <div className="col-start-3 row-span-2 h-full bg-white border-l border-gray-200 flex flex-col min-h-0">
+        <div className="flex-1 border-b border-gray-200 min-h-0">
           <InboxPanel />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-h-0 flex flex-col">
           <GmailPanel />
         </div>
       </div>
