@@ -246,11 +246,11 @@ def get_all_tools() -> List[Tool]:
         )
     ])
     
-    # Ticket management tools
+    # Ticket management tools (JSM Service Requests)
     tools.extend([
         Tool(
             name="create_ticket",
-            description="Create a new support ticket.",
+            description="Create a new support ticket in Jira Service Management (JSM). If category is 'bug_report' or 'feature_request', also creates a linked Jira Software issue.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -259,7 +259,7 @@ def get_all_tools() -> List[Tool]:
                     "name": {"type": "string", "description": "Customer name"},
                     "email": {"type": "string", "description": "Customer email"},
                     "priority": {"type": "string", "description": "Priority level (low, medium, high, urgent)", "default": "medium"},
-                    "category": {"type": "string", "description": "Ticket category (optional)"},
+                    "category": {"type": "string", "description": "Ticket category (optional). If 'bug_report' or 'feature_request', will also create Jira Software issue."},
                     "phone": {"type": "string", "description": "Customer phone (optional)"}
                 },
                 "required": ["subject", "description", "name", "email"]
@@ -267,7 +267,7 @@ def get_all_tools() -> List[Tool]:
         ),
         Tool(
             name="get_tickets",
-            description="Get support tickets. Use this to search, filter, or list tickets.",
+            description="Get support tickets from Jira Service Management (JSM). Use this to search, filter, or list JSM service requests.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -278,12 +278,12 @@ def get_all_tools() -> List[Tool]:
         ),
         Tool(
             name="update_ticket_status",
-            description="Update the status of a support ticket.",
+            description="Update the status of a JSM support ticket. ticket_id should be a JSM issue key (e.g., 'SR-123').",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ticket_id": {"type": "string", "description": "ID of the ticket to update"},
-                    "status": {"type": "string", "description": "New status (open, in-progress, resolved, closed)"}
+                    "ticket_id": {"type": "string", "description": "JSM issue key (e.g., 'SR-123') of the ticket to update"},
+                    "status": {"type": "string", "description": "New status (open, in_progress, resolved, closed)"}
                 },
                 "required": ["ticket_id", "status"]
             }
@@ -355,32 +355,33 @@ def get_all_tools() -> List[Tool]:
     tools.extend([
         Tool(
             name="create_jira_issue_from_ticket",
-            description="Create a Jira issue from a support ticket. Requires Jira project to be set up for the organization.",
+            description="Create a Jira Software issue from a JSM ticket. Requires Jira Software project to be set up for the organization. ticket_id should be a JSM issue key (e.g., 'SR-123').",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ticket_id": {"type": "string", "description": "ID of the ticket to convert to Jira issue"}
+                    "ticket_id": {"type": "string", "description": "JSM issue key (e.g., 'SR-123') of the ticket to convert to Jira Software issue"}
                 },
                 "required": ["ticket_id"]
             }
         ),
         Tool(
             name="get_jira_issues_for_project",
-            description="Get Jira issues for a project. Uses organization's project if project_key not provided.",
+            description="Get Jira issues for a project. Can fetch JSM Service Requests (project_type='jsm') or Jira Software issues (project_type='software'). Uses organization's project if project_key not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "project_type": {"type": "string", "description": "Project type: 'jsm' for JSM Service Requests, 'software' for Jira Software issues", "default": "jsm"},
                     "project_key": {"type": "string", "description": "Jira project key (optional, uses org's project if not provided)"}
                 }
             }
         ),
         Tool(
             name="sync_ticket_to_jira",
-            description="Sync a ticket to Jira (creates or updates Jira issue).",
+            description="Sync a JSM ticket to Jira Software (creates Jira Software issue from JSM ticket). ticket_id should be a JSM issue key (e.g., 'SR-123').",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ticket_id": {"type": "string", "description": "ID of the ticket to sync"}
+                    "ticket_id": {"type": "string", "description": "JSM issue key (e.g., 'SR-123') of the ticket to sync"}
                 },
                 "required": ["ticket_id"]
             }

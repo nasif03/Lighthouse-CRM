@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -23,16 +23,21 @@ type TicketFormData = {
 
 export default function CreateTicket() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, token } = useAuthStore();
   const { activeTenantId } = useTenantStore();
+  
+  // Get contact information from location state (if navigating from Contacts page)
+  const contactInfo = location.state as { contactName?: string; contactEmail?: string; contactPhone?: string } | null;
+  
   const [formData, setFormData] = useState<TicketFormData>({
     subject: '',
     description: '',
     category: '',
     priority: 'medium',
-    contactName: user?.name || '',
-    contactEmail: user?.email || '',
-    contactPhone: '',
+    contactName: contactInfo?.contactName || user?.name || '',
+    contactEmail: contactInfo?.contactEmail || user?.email || '',
+    contactPhone: contactInfo?.contactPhone || '',
     attachments: [],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);

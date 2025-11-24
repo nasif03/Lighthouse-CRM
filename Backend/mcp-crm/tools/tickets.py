@@ -17,8 +17,17 @@ get_user_ids_from_context = mcp_crm_utils.get_user_ids_from_context
 format_error_response = mcp_crm_utils.format_error_response
 format_success_response = mcp_crm_utils.format_success_response
 parse_filters = mcp_crm_utils.parse_filters
-from config.database import tickets_collection, organizations_collection, roles_collection
+from config.database import organizations_collection, roles_collection
 from utils.query_filters import get_user_ids
+from services.jira_service import (
+    create_jsm_service_request,
+    get_jsm_service_requests,
+    get_jsm_service_request,
+    update_jsm_service_request,
+    create_jira_software_issue,
+    link_jsm_to_jira_software
+)
+from config.database import jira_integration_collection
 
 
 def has_ticket_role(user_doc: dict, org_id: str) -> bool:
@@ -57,29 +66,6 @@ def has_ticket_role(user_doc: dict, org_id: str) -> bool:
     return False
 
 
-def generate_ticket_number(org_id: str) -> str:
-    """Generate a unique ticket number"""
-    date_prefix = datetime.utcnow().strftime("%Y%m%d")
-    today_prefix = f"TKT-{date_prefix}-"
-    
-    today_tickets = tickets_collection.find({
-        "orgId": org_id,
-        "ticketNumber": {"$regex": f"^{today_prefix}"}
-    }).sort("ticketNumber", -1).limit(1)
-    
-    last_ticket = list(today_tickets)
-    if last_ticket and last_ticket[0].get("ticketNumber"):
-        last_num = last_ticket[0]["ticketNumber"].split("-")[-1]
-        try:
-            next_num = int(last_num) + 1
-        except ValueError:
-            next_num = 1
-    else:
-        next_num = 1
-    
-    return f"{today_prefix}{next_num:04d}"
-
-
 async def create_ticket(
     subject: str,
     description: str,
@@ -91,7 +77,7 @@ async def create_ticket(
     context: Optional[Dict] = None
 ) -> str:
     """
-    Create a new support ticket.
+    Create a new support ticket in JSM.
     
     Args:
         subject: Ticket subject
@@ -99,12 +85,12 @@ async def create_ticket(
         name: Customer name
         email: Customer email
         priority: Priority level (low, medium, high, urgent)
-        category: Ticket category (optional)
+        category: Ticket category (optional, if bug_report or feature_request, will also create Jira Software issue)
         phone: Customer phone (optional)
         context: MCP request context (for authentication)
     
     Returns:
-        Success message with ticket ID
+        Success message with JSM ticket key
     """
     try:
         user_context = await get_user_context(context or {})
@@ -113,36 +99,95 @@ async def create_ticket(
         
         org_id = user_ids["orgId"]
         
-        now = datetime.utcnow()
-        ticket_number = generate_ticket_number(org_id)
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            return "Organization does not have JSM project configured. Please create one first."
         
-        ticket_data = {
-            "ticketNumber": ticket_number,
-            "orgId": org_id,
-            "name": name,
-            "email": email,
-            "phone": phone or "",
+        project_key = org.get("jiraProjectKey")
+        
+        # Create JSM Service Request
+        jsm_description = f"""Customer: {name} ({email})
+Phone: {phone or 'N/A'}
+Priority: {priority}
+Category: {category or 'N/A'}
+
+Description:
+{description}
+"""
+        
+        jsm_ticket = create_jsm_service_request(
+            project_key=project_key,
+            summary=subject,
+            description=jsm_description,
+            reporter_email=email,
+            reporter_name=name,
+            priority=priority
+        )
+        
+        if not jsm_ticket:
+            return "Failed to create ticket in JSM."
+        
+        jsm_issue_key = jsm_ticket["issueKey"]
+        
+        # If category is bug_report or feature_request, also create Jira Software issue
+        jira_software_issue_key = None
+        if category in ["bug_report", "feature_request"]:
+            jira_software_project_key = org.get("jiraSoftwareProjectKey")
+            if jira_software_project_key:
+                try:
+                    issue_type = "Bug" if category == "bug_report" else "Story"
+                    jira_summary = f"[{jsm_issue_key}] {subject}"
+                    jira_description = f"""JSM Service Request: {jsm_issue_key}
+Customer: {name} ({email})
+Priority: {priority}
+
+Description:
+{description}
+"""
+                    
+                    jira_issue_info = create_jira_software_issue(
+                        project_key=jira_software_project_key,
+                        summary=jira_summary,
+                        description=jira_description,
+                        issue_type=issue_type
+                    )
+                    
+                    if jira_issue_info:
+                        jira_software_issue_key = jira_issue_info["issueKey"]
+                        # Link JSM ticket to Jira Software issue
+                        link_jsm_to_jira_software(jsm_issue_key, jira_software_issue_key)
+                        
+                        # Store integration record
+                        jira_integration_collection.insert_one({
+                            "orgId": org_id,
+                            "ticketId": jsm_issue_key,
+                            "jiraIssueKey": jira_software_issue_key,
+                            "jiraIssueId": jira_issue_info["issueId"],
+                            "jiraProjectKey": jira_software_project_key,
+                            "syncDirection": "jsm_to_jira_software",
+                            "status": "active",
+                            "lastSyncedAt": datetime.utcnow(),
+                            "createdAt": datetime.utcnow(),
+                            "updatedAt": datetime.utcnow()
+                        })
+                except Exception as e:
+                    print(f"Failed to create Jira Software issue: {str(e)}")
+                    # Don't fail ticket creation if Jira Software creation fails
+        
+        result_data = {
+            "ticketId": jsm_issue_key,
+            "ticketNumber": jsm_issue_key,  # JSM generates keys like SR-123
             "subject": subject,
-            "description": description,
-            "priority": priority,
-            "category": category,
-            "status": "open",
-            "assignedTo": None,
-            "createdAt": now,
-            "updatedAt": now,
+            "priority": priority
         }
         
-        result = tickets_collection.insert_one(ticket_data)
-        ticket_id = str(result.inserted_id)
+        if jira_software_issue_key:
+            result_data["jiraSoftwareIssueKey"] = jira_software_issue_key
         
         return format_success_response(
-            f"Ticket created successfully: {ticket_number}",
-            {
-                "ticketId": ticket_id,
-                "ticketNumber": ticket_number,
-                "subject": subject,
-                "priority": priority
-            }
+            f"Ticket created successfully in JSM: {jsm_issue_key}",
+            result_data
         )
     except Exception as e:
         return format_error_response(e)
@@ -154,7 +199,7 @@ async def get_tickets(
     context: Optional[Dict] = None
 ) -> str:
     """
-    Get support tickets.
+    Get support tickets from JSM.
     
     Args:
         filters: Optional filter string (e.g., "status:open,priority:high")
@@ -162,7 +207,7 @@ async def get_tickets(
         context: MCP request context (for authentication)
     
     Returns:
-        Formatted list of tickets
+        Formatted list of JSM tickets
     """
     try:
         user_context = await get_user_context(context or {})
@@ -176,35 +221,70 @@ async def get_tickets(
         if not has_ticket_role(user_doc, org_id):
             return "You do not have permission to view tickets. Contact your administrator."
         
-        # Build filter
-        query_filter = {"orgId": org_id}
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            return "Organization does not have JSM project configured."
         
-        # Add additional filters
+        project_key = org.get("jiraProjectKey")
+        
+        # Build JQL query
+        jql_parts = [f"project = {project_key}", "issuetype = 'Service Request'"]
+        
+        # Parse filters and add to JQL
         if filters:
-            additional = parse_filters(filters)
-            query_filter.update(additional)
+            filter_dict = parse_filters(filters)
+            if filter_dict.get("status"):
+                status_map = {
+                    "open": "To Do",
+                    "in_progress": "In Progress",
+                    "resolved": "Done",
+                    "closed": "Closed"
+                }
+                jsm_status = status_map.get(filter_dict["status"], filter_dict["status"])
+                jql_parts.append(f"status = '{jsm_status}'")
+            
+            if filter_dict.get("priority"):
+                priority_map = {
+                    "low": "Low",
+                    "medium": "Medium",
+                    "high": "High",
+                    "urgent": "Highest"
+                }
+                jsm_priority = priority_map.get(filter_dict["priority"], filter_dict["priority"])
+                jql_parts.append(f"priority = '{jsm_priority}'")
         
-        # Query tickets
-        cursor = tickets_collection.find(query_filter).sort("createdAt", -1).limit(limit)
-        tickets = list(cursor)
+        jql = " AND ".join(jql_parts) + " ORDER BY created DESC"
         
-        if not tickets:
+        # Get tickets from JSM
+        jsm_tickets = get_jsm_service_requests(project_key, jql)
+        
+        if not jsm_tickets:
             return "No tickets found matching the criteria."
+        
+        # Limit results
+        limited_tickets = jsm_tickets[:limit]
+        
+        # Get Jira Software issue links
+        ticket_keys = [t["key"] for t in limited_tickets]
+        integrations = list(jira_integration_collection.find({"ticketId": {"$in": ticket_keys}}))
+        jira_software_map = {intg.get("ticketId"): intg.get("jiraIssueKey") for intg in integrations}
         
         # Format results
         results = []
-        for ticket in tickets:
+        for jsm_ticket in limited_tickets:
             results.append({
-                "id": str(ticket["_id"]),
-                "ticketNumber": ticket.get("ticketNumber", ""),
-                "subject": ticket.get("subject", ""),
-                "name": ticket.get("name", ""),
-                "email": ticket.get("email", ""),
-                "priority": ticket.get("priority", "medium"),
-                "status": ticket.get("status", "open"),
-                "category": ticket.get("category"),
-                "assignedTo": ticket.get("assignedTo"),
-                "createdAt": ticket.get("createdAt").isoformat() if ticket.get("createdAt") else ""
+                "id": jsm_ticket["key"],
+                "ticketNumber": jsm_ticket["key"],
+                "subject": jsm_ticket.get("summary", ""),
+                "name": jsm_ticket.get("reporterName", ""),
+                "email": jsm_ticket.get("reporterEmail", ""),
+                "priority": jsm_ticket.get("priority", "medium"),
+                "status": jsm_ticket.get("status", "open"),
+                "category": None,  # JSM doesn't store category in standard fields
+                "assignedTo": None,  # Would need to map JSM account ID to user ID
+                "createdAt": jsm_ticket.get("created", ""),
+                "jiraSoftwareIssueKey": jira_software_map.get(jsm_ticket["key"])
             })
         
         return format_success_response(
@@ -221,11 +301,11 @@ async def update_ticket_status(
     context: Optional[Dict] = None
 ) -> str:
     """
-    Update the status of a ticket.
+    Update the status of a JSM ticket.
     
     Args:
-        ticket_id: ID of the ticket to update
-        status: New status (open, in-progress, resolved, closed)
+        ticket_id: JSM issue key (e.g., "SR-123") of the ticket to update
+        status: New status (open, in_progress, resolved, closed)
         context: MCP request context (for authentication)
     
     Returns:
@@ -243,22 +323,36 @@ async def update_ticket_status(
         if not has_ticket_role(user_doc, org_id):
             return "You do not have permission to update tickets."
         
-        # Check if ticket exists
-        ticket = tickets_collection.find_one({"_id": ObjectId(ticket_id), "orgId": org_id})
-        if not ticket:
-            return "Ticket not found or you don't have permission to update it."
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            return "Organization does not have JSM project configured."
         
-        # Update status
-        tickets_collection.update_one(
-            {"_id": ObjectId(ticket_id)},
-            {"$set": {"status": status, "updatedAt": datetime.utcnow()}}
+        project_key = org.get("jiraProjectKey")
+        
+        # Verify ticket belongs to this organization's project
+        if not ticket_id.startswith(project_key):
+            return "Ticket not found in this organization."
+        
+        # Get ticket from JSM
+        jsm_ticket = get_jsm_service_request(ticket_id)
+        if not jsm_ticket:
+            return "Ticket not found in JSM."
+        
+        # Update status in JSM
+        updated_ticket = update_jsm_service_request(
+            issue_key=ticket_id,
+            status=status
         )
+        
+        if not updated_ticket:
+            return "Failed to update ticket status in JSM."
         
         return format_success_response(
             f"Ticket status updated to '{status}'",
             {
                 "ticketId": ticket_id,
-                "ticketNumber": ticket.get("ticketNumber"),
+                "ticketNumber": ticket_id,
                 "newStatus": status
             }
         )

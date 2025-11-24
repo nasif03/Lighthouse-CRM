@@ -157,6 +157,9 @@ export default function Support() {
     }
   };
 
+  // Priority order for sorting
+  const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+
   // Filter and sort tickets
   const filteredTickets = tickets
     .filter(ticket => {
@@ -172,9 +175,14 @@ export default function Support() {
       return matchesSearch && matchesStatus && matchesPriority;
     })
     .sort((a, b) => {
+      // Sort by priority first (urgent > high > medium > low)
+      const priorityDiff = (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      // Then by last updated (newest first)
       const dateA = new Date(a.updatedAt).getTime();
       const dateB = new Date(b.updatedAt).getTime();
-      return dateB - dateA; // Newest first
+      return dateB - dateA;
     });
 
   const handleSelectTicket = (ticketId: string) => {
@@ -204,7 +212,8 @@ export default function Support() {
     total: tickets.length,
     open: tickets.filter(t => t.status === 'open').length,
     inProgress: tickets.filter(t => t.status === 'in_progress').length,
-    resolved: tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
+    resolved: tickets.filter(t => t.status === 'resolved').length,
+    closed: tickets.filter(t => t.status === 'closed').length,
   };
 
   if (error && error.includes('permission')) {
@@ -231,7 +240,7 @@ export default function Support() {
   return (
     <div className="space-y-4">
       {/* Stats Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-gray-500">Total Tickets</div>
@@ -254,6 +263,12 @@ export default function Support() {
           <CardContent className="p-4">
             <div className="text-sm text-gray-500">Resolved</div>
             <div className="text-2xl font-semibold text-green-600 mt-1">{stats.resolved}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm text-gray-500">Closed</div>
+            <div className="text-2xl font-semibold text-gray-600 mt-1">{stats.closed}</div>
           </CardContent>
         </Card>
       </div>
@@ -369,7 +384,6 @@ export default function Support() {
                     <TH>Status</TH>
                     <TH>Jira</TH>
                     <TH>Assigned To</TH>
-                    <TH>Created</TH>
                     <TH>Last Updated</TH>
                     <TH>Actions</TH>
                   </tr>
@@ -377,7 +391,7 @@ export default function Support() {
                 <TBody>
                   {filteredTickets.length === 0 ? (
                     <tr>
-                      <TD colSpan={11} className="text-center py-8 text-gray-500">
+                      <TD colSpan={10} className="text-center py-8 text-gray-500">
                         {tickets.length === 0 ? 'No tickets found' : 'No tickets match your filters'}
                       </TD>
                     </tr>
@@ -437,46 +451,40 @@ export default function Support() {
                             <span className="text-xs text-gray-400">—</span>
                           )}
                         </TD>
-                        <TD>
-                          <div className="text-sm">
-                            {ticket.assignedToName || 'Unassigned'}
-                          </div>
-                        </TD>
-                        <TD>
-                          <span className="text-sm text-gray-600">{formatDate(ticket.createdAt)}</span>
+                        <TD onClick={(e) => e.stopPropagation()} className="w-32">
+                          {isAdmin ? (
+                            <Select
+                              value={ticket.assignedTo || 'unassigned'}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const employeeId = e.target.value === 'unassigned' ? null : e.target.value;
+                                handleAssignTicket(ticket.id, employeeId);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs w-full"
+                            >
+                              <option value="unassigned">Unassigned</option>
+                              {employees.map(emp => (
+                                <option key={emp.id} value={emp.id}>{emp.name}</option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <div className="text-xs truncate" title={ticket.assignedToName || 'Unassigned'}>
+                              {ticket.assignedToName || 'Unassigned'}
+                            </div>
+                          )}
                         </TD>
                         <TD>
                           <span className="text-sm text-gray-600">{formatDate(ticket.updatedAt)}</span>
                         </TD>
                         <TD onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => navigate(`/support/${ticket.id}`)}
-                            >
-                              View
-                            </Button>
-                            {isAdmin ? (
-                              <Select
-                                value={ticket.assignedTo || 'unassigned'}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  const employeeId = e.target.value === 'unassigned' ? null : e.target.value;
-                                  handleAssignTicket(ticket.id, employeeId);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-xs"
-                              >
-                                <option value="unassigned">Unassigned</option>
-                                {employees.map(emp => (
-                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                ))}
-                              </Select>
-                            ) : (
-                              <span className="text-xs text-gray-500">—</span>
-                            )}
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/support/${ticket.id}`)}
+                          >
+                            View
+                          </Button>
                         </TD>
                       </TR>
                     ))
