@@ -237,15 +237,6 @@ export default function GmailPanel() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return dateString;
-    }
-  };
-
   // Helper to format datetime-local input value
   const formatDateTimeLocal = (date: Date): string => {
     const year = date.getFullYear();
@@ -477,7 +468,7 @@ export default function GmailPanel() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full w-full flex flex-col min-h-0">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       <div className="px-4 py-3 border-b border-gray-200 bg-white">
@@ -563,7 +554,7 @@ export default function GmailPanel() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {needsGmailReconnect && (
           <div className="p-4">
             <Card>
@@ -586,36 +577,60 @@ export default function GmailPanel() {
             ) : (
               <div className="space-y-2">
                 {messages.map(msg => {
-                  // Extract email from "Name <email@example.com>" or just "email@example.com"
-                  const extractEmail = (from: string): string => {
+                  const extractEmail = (from?: string): string => {
+                    if (!from) return 'unknown@unknown';
                     const match = from.match(/<(.+)>/);
-                    return match ? match[1] : from.split(' ').pop() || from;
+                    if (match) return match[1];
+                    const parts = from.split(' ');
+                    return parts.pop() || from || 'unknown@unknown';
                   };
-                  
+                  const formatRelativeTime = (dateString?: string) => {
+                    if (!dateString) return '';
+                    try {
+                      const date = new Date(dateString);
+                      const now = new Date();
+                      const diff = now.getTime() - date.getTime();
+                      const minutes = Math.floor(diff / (1000 * 60));
+                      const hours = Math.floor(diff / (1000 * 60 * 60));
+                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+                      if (days >= 3) {
+                        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                      }
+                      if (days >= 1) {
+                        return `${days}d ago`;
+                      }
+                      if (hours >= 1) {
+                        return `${hours}h ago`;
+                      }
+                      if (minutes >= 1) {
+                        return `${minutes}m ago`;
+                      }
+                      return 'Just now';
+                    } catch {
+                      return dateString || '';
+                    }
+                  };
+
                   return (
                     <div key={msg.id} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm text-gray-900 truncate">{msg.from}</div>
-                              <div className="text-sm font-semibold text-gray-800 mt-1 truncate">{msg.subject || '(No Subject)'}</div>
-                              <div className="text-xs text-gray-600 mt-1 line-clamp-2">{msg.snippet}</div>
-                            </div>
-                            <div className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{formatDate(msg.date)}</div>
-                          </div>
-                          <button
-                            onClick={() => openMeetingModal(extractEmail(msg.from))}
-                            className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium"
-                            title="Schedule a meeting with this sender"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span>Schedule Meeting</span>
-                          </button>
+                          <div className="text-sm font-semibold text-gray-800 truncate">{msg.subject || '(No Subject)'}</div>
+                          <div className="text-xs text-gray-600 mt-1 line-clamp-2">{msg.snippet}</div>
                         </div>
+                        <div className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{formatRelativeTime(msg.date)}</div>
                       </div>
+                      <button
+                        onClick={() => openMeetingModal(extractEmail(msg.from))}
+                        className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium"
+                        title="Schedule a meeting with this sender"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Schedule Meeting</span>
+                      </button>
                     </div>
                   );
                 })}

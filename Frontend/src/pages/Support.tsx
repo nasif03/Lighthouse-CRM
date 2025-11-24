@@ -273,7 +273,6 @@ export default function Support() {
         </Card>
       </div>
 
-      {/* Main Ticket Management Card */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

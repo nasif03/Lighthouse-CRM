@@ -32,3 +32,9 @@ JIRA_SERVER = os.getenv("JIRA_SERVER", "https://lighthouse-crm.atlassian.net")
 JIRA_EMAIL = os.getenv("JIRA_EMAIL", "niloy.ashraf@northsouth.edu")
 JIRA_TOKEN = os.getenv("JIRA_TOKEN")
 
+# Support AI / in-app assistant configuration
+SUPPORT_AI_API_KEY = os.getenv("SUPPORT_AI_API_KEY")
+SUPPORT_AI_MODEL = os.getenv("SUPPORT_AI_MODEL", "gpt-4o-mini")
+SUPPORT_AI_BASE_URL = os.getenv("SUPPORT_AI_BASE_URL", "https://api.openai.com/v1")
+SUPPORT_AI_SYSTEM_PROMPT = os.getenv("SUPPORT_AI_SYSTEM_PROMPT")
+

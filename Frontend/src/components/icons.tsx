@@ -110,4 +110,24 @@ export function IconFireflies(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconAssistant(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12 2a7 7 0 00-7 7v2a7 7 0 007 7h.5l2.5 3v-3.5A7 7 0 0019 11V9a7 7 0 00-7-7z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 10h.01M12 10h.01M15 10h.01"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 
