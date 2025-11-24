@@ -3,12 +3,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from bson import ObjectId
 from datetime import datetime
 from api.dependencies import get_current_user
-from config.database import organizations_collection, jira_integration_collection, tickets_collection, roles_collection
+from config.database import organizations_collection, jira_integration_collection, roles_collection
 from services.jira_service import (
-    create_jira_project,
-    create_jira_issue,
-    get_jira_issues,
-    get_jira_issue
+    create_jsm_service_project,
+    create_jira_software_project,
+    create_jira_software_issue,
+    get_jsm_service_requests,
+    get_jira_software_issues,
+    get_jira_issue,
+    get_jsm_service_request
 )
 from api.routes.organizations import is_org_admin
 from utils.query_filters import get_user_ids
@@ -56,7 +59,7 @@ async def create_project_for_org(
     org_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a Jira project for an organization (admin only, first time)"""
+    """Create a JSM Service Project for an organization (admin only, first time)"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -64,40 +67,104 @@ async def create_project_for_org(
         
         # Check if user is admin
         if not is_org_admin(user_doc, org_id):
-            raise HTTPException(status_code=403, detail="Only organization admins can create Jira projects")
+            raise HTTPException(status_code=403, detail="Only organization admins can create JSM projects")
         
         # Get organization
         org = organizations_collection.find_one({"_id": ObjectId(org_id)})
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
         
-        # Check if Jira project already exists
+        # Check if JSM project already exists
         if org.get("jiraProjectKey"):
             return {
-                "message": "Jira project already exists",
+                "message": "JSM project already exists",
                 "projectKey": org.get("jiraProjectKey"),
                 "projectUrl": f"https://lighthouse-crm.atlassian.net/browse/{org.get('jiraProjectKey')}"
             }
         
-        # Create Jira project
+        # Create JSM Service Project
         admin_email = user_doc.get("email")
-        project_info = create_jira_project(org.get("name", "Organization"), org_id, admin_email)
+        project_info = create_jsm_service_project(org.get("name", "Organization"), org_id, admin_email)
         
         if not project_info:
-            raise HTTPException(status_code=500, detail="Failed to create Jira project")
+            raise HTTPException(status_code=500, detail="Failed to create JSM project")
         
-        # Update organization with Jira project key
+        # Update organization with JSM project info
+        update_data = {
+            "jiraProjectKey": project_info["projectKey"],
+            "jiraProjectId": project_info["projectId"],
+            "updatedAt": datetime.utcnow()
+        }
+        
+        # Add service desk ID if available
+        if project_info.get("serviceDeskId"):
+            update_data["jsmServiceDeskId"] = project_info["serviceDeskId"]
+        
+        organizations_collection.update_one(
+            {"_id": ObjectId(org_id)},
+            {"$set": update_data}
+        )
+        
+        return {
+            "message": "JSM Service Project created successfully",
+            "projectKey": project_info["projectKey"],
+            "projectName": project_info["projectName"],
+            "projectUrl": project_info["projectUrl"],
+            "serviceDeskId": project_info.get("serviceDeskId")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating JSM project: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create JSM project: {str(e)}")
+
+@router.post("/software/projects/{org_id}")
+async def create_jira_software_project_for_org(
+    org_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a Jira Software project for development (admin only, optional)"""
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Check if user is admin
+        if not is_org_admin(user_doc, org_id):
+            raise HTTPException(status_code=403, detail="Only organization admins can create Jira Software projects")
+        
+        # Get organization
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        
+        # Check if Jira Software project already exists
+        if org.get("jiraSoftwareProjectKey"):
+            return {
+                "message": "Jira Software project already exists",
+                "projectKey": org.get("jiraSoftwareProjectKey"),
+                "projectUrl": f"https://lighthouse-crm.atlassian.net/browse/{org.get('jiraSoftwareProjectKey')}"
+            }
+        
+        # Create Jira Software Project
+        admin_email = user_doc.get("email")
+        project_info = create_jira_software_project(org.get("name", "Organization"), org_id, admin_email)
+        
+        if not project_info:
+            raise HTTPException(status_code=500, detail="Failed to create Jira Software project")
+        
+        # Update organization with Jira Software project info
         organizations_collection.update_one(
             {"_id": ObjectId(org_id)},
             {"$set": {
-                "jiraProjectKey": project_info["projectKey"],
-                "jiraProjectId": project_info["projectId"],
+                "jiraSoftwareProjectKey": project_info["projectKey"],
+                "jiraSoftwareProjectId": project_info["projectId"],
                 "updatedAt": datetime.utcnow()
             }}
         )
         
         return {
-            "message": "Jira project created successfully",
+            "message": "Jira Software project created successfully",
             "projectKey": project_info["projectKey"],
             "projectName": project_info["projectName"],
             "projectUrl": project_info["projectUrl"]
@@ -105,86 +172,102 @@ async def create_project_for_org(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating Jira project: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create Jira project: {str(e)}")
+        print(f"Error creating Jira Software project: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create Jira Software project: {str(e)}")
 
 @router.post("/tickets/{ticket_id}/create-issue")
 async def create_issue_for_ticket(
     ticket_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a Jira issue for a ticket (admin or ticket role)"""
+    """Create a Jira Software issue for a JSM ticket (admin or ticket role)"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        # Get ticket
-        ticket = tickets_collection.find_one({"_id": ObjectId(ticket_id)})
-        if not ticket:
-            raise HTTPException(status_code=404, detail="Ticket not found")
-        
-        org_id = ticket.get("orgId")
+        # Get organization ID
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         # Check if user has permission (admin or ticket role)
         has_permission = is_org_admin(user_doc, org_id) or has_ticket_role(user_doc, org_id)
         if not has_permission:
             raise HTTPException(
                 status_code=403,
-                detail="You do not have permission to create Jira issues for tickets"
+                detail="You do not have permission to create Jira Software issues for tickets"
             )
         
-        # Check if issue already exists
+        # Get organization
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        
+        # Check if organization has Jira Software project
+        if not org.get("jiraSoftwareProjectKey"):
+            raise HTTPException(
+                status_code=400,
+                detail="Organization does not have a Jira Software project. Please create one first."
+            )
+        
+        # Get JSM ticket (ticket_id is now a JSM issue key like "SR-123")
+        jsm_ticket = get_jsm_service_request(ticket_id)
+        if not jsm_ticket:
+            raise HTTPException(status_code=404, detail="JSM ticket not found")
+        
+        # Verify ticket belongs to this organization's JSM project
+        jsm_project_key = org.get("jiraProjectKey")
+        if not jsm_project_key or not ticket_id.startswith(jsm_project_key):
+            raise HTTPException(status_code=404, detail="Ticket not found in this organization")
+        
+        # Check if Jira Software issue already exists for this ticket
         existing = jira_integration_collection.find_one({"ticketId": ticket_id})
         if existing:
             return {
-                "message": "Jira issue already exists for this ticket",
+                "message": "Jira Software issue already exists for this ticket",
                 "issueKey": existing.get("jiraIssueKey"),
                 "issueUrl": f"https://lighthouse-crm.atlassian.net/browse/{existing.get('jiraIssueKey')}"
             }
         
-        # Get organization Jira project key
-        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
-        if not org or not org.get("jiraProjectKey"):
-            raise HTTPException(
-                status_code=400,
-                detail="Organization does not have a Jira project. Please create one first."
-            )
+        jira_software_project_key = org.get("jiraSoftwareProjectKey")
         
-        project_key = org.get("jiraProjectKey")
-        
-        # Determine issue type based on ticket category
+        # Determine issue type (default to Task, but could be Bug or Story based on ticket)
         issue_type = "Task"
-        if ticket.get("category") == "bug_report":
-            issue_type = "Bug"
-        elif ticket.get("category") == "feature_request":
-            issue_type = "Story"
+        # Note: JSM doesn't store category in standard fields, so we default to Task
+        # In production, you might want to add custom fields to JSM
         
-        # Create Jira issue
-        summary = f"[{ticket.get('ticketNumber')}] {ticket.get('subject')}"
-        description = f"""
-Ticket Number: {ticket.get('ticketNumber')}
-Customer: {ticket.get('name')} ({ticket.get('email')})
-Priority: {ticket.get('priority', 'medium')}
-Category: {ticket.get('category', 'N/A')}
+        # Create Jira Software issue
+        summary = f"[{jsm_ticket.get('key')}] {jsm_ticket.get('summary')}"
+        description = f"""JSM Service Request: {jsm_ticket.get('key')}
+Customer: {jsm_ticket.get('reporterName')} ({jsm_ticket.get('reporterEmail')})
+Priority: {jsm_ticket.get('priorityName', 'Medium')}
 
 Description:
-{ticket.get('description')}
+{jsm_ticket.get('description')}
 """
         
-        issue_info = create_jira_issue(project_key, summary, description, issue_type)
+        issue_info = create_jira_software_issue(
+            project_key=jira_software_project_key,
+            summary=summary,
+            description=description,
+            issue_type=issue_type
+        )
         
         if not issue_info:
-            raise HTTPException(status_code=500, detail="Failed to create Jira issue")
+            raise HTTPException(status_code=500, detail="Failed to create Jira Software issue")
+        
+        # Link JSM ticket to Jira Software issue
+        from services.jira_service import link_jsm_to_jira_software
+        link_success = link_jsm_to_jira_software(ticket_id, issue_info["issueKey"])
         
         # Store integration record
         jira_integration_collection.insert_one({
             "orgId": org_id,
-            "ticketId": ticket_id,
-            "jiraIssueKey": issue_info["issueKey"],
+            "ticketId": ticket_id,  # JSM issue key
+            "jiraIssueKey": issue_info["issueKey"],  # Jira Software issue key
             "jiraIssueId": issue_info["issueId"],
-            "jiraProjectKey": project_key,
-            "syncDirection": "ticket_to_jira",
+            "jiraProjectKey": jira_software_project_key,
+            "syncDirection": "jsm_to_jira_software",
             "status": "active",
             "lastSyncedAt": datetime.utcnow(),
             "createdAt": datetime.utcnow(),
@@ -192,21 +275,27 @@ Description:
         })
         
         return {
-            "message": "Jira issue created successfully",
+            "message": "Jira Software issue created and linked successfully",
             "issueKey": issue_info["issueKey"],
-            "issueUrl": issue_info["issueUrl"]
+            "issueUrl": issue_info["issueUrl"],
+            "jsmTicketKey": ticket_id,
+            "linked": link_success
         }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating Jira issue: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create Jira issue: {str(e)}")
+        print(f"Error creating Jira Software issue: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create Jira Software issue: {str(e)}")
 
 @router.get("/issues")
 async def get_issues(
+    project_type: str = "jsm",  # "jsm" or "software"
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all Jira issues for the current user's organization (admin or ticket role)"""
+    """Get all Jira issues for the current user's organization (admin or ticket role)
+    
+    project_type: "jsm" for JSM Service Requests, "software" for Jira Software issues
+    """
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -224,23 +313,41 @@ async def get_issues(
                 detail="You do not have permission to view Jira issues"
             )
         
-        # Get organization Jira project key
+        # Get organization
         org = organizations_collection.find_one({"_id": ObjectId(org_id)})
-        if not org or not org.get("jiraProjectKey"):
+        if not org:
             return []
         
-        project_key = org.get("jiraProjectKey")
-        
-        # Get Jira issues
-        issues = get_jira_issues(project_key)
-        
-        # Get ticket mappings
-        integrations = list(jira_integration_collection.find({"orgId": org_id}))
-        ticket_map = {intg.get("jiraIssueKey"): intg.get("ticketId") for intg in integrations}
-        
-        # Add ticket ID to issues
-        for issue in issues:
-            issue["ticketId"] = ticket_map.get(issue["key"])
+        if project_type == "jsm":
+            # Get JSM Service Requests
+            project_key = org.get("jiraProjectKey")
+            if not project_key:
+                return []
+            
+            issues = get_jsm_service_requests(project_key)
+            
+            # Get Jira Software issue links
+            integrations = list(jira_integration_collection.find({"orgId": org_id}))
+            jira_software_map = {intg.get("ticketId"): intg.get("jiraIssueKey") for intg in integrations}
+            
+            # Add linked Jira Software issue key to JSM tickets
+            for issue in issues:
+                issue["linkedJiraSoftwareIssue"] = jira_software_map.get(issue["key"])
+        else:
+            # Get Jira Software issues
+            project_key = org.get("jiraSoftwareProjectKey")
+            if not project_key:
+                return []
+            
+            issues = get_jira_software_issues(project_key)
+            
+            # Get JSM ticket mappings
+            integrations = list(jira_integration_collection.find({"orgId": org_id}))
+            jsm_ticket_map = {intg.get("jiraIssueKey"): intg.get("ticketId") for intg in integrations}
+            
+            # Add JSM ticket key to Jira Software issues
+            for issue in issues:
+                issue["linkedJsmTicket"] = jsm_ticket_map.get(issue["key"])
         
         return issues
     except HTTPException:
@@ -254,7 +361,7 @@ async def get_issue(
     issue_key: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get a single Jira issue by key (admin or ticket role)"""
+    """Get a single Jira issue by key (works for both JSM and Jira Software issues)"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -272,15 +379,26 @@ async def get_issue(
                 detail="You do not have permission to view Jira issues"
             )
         
-        # Get issue
+        # Get issue (automatically detects JSM vs Jira Software)
         issue = get_jira_issue(issue_key)
         if not issue:
             raise HTTPException(status_code=404, detail="Jira issue not found")
         
-        # Get ticket mapping
-        integration = jira_integration_collection.find_one({"jiraIssueKey": issue_key})
+        # Get linked issue/ticket mapping
+        # If this is a JSM ticket, find linked Jira Software issue
+        # If this is a Jira Software issue, find linked JSM ticket
+        integration = jira_integration_collection.find_one({"$or": [
+            {"ticketId": issue_key},  # JSM ticket key
+            {"jiraIssueKey": issue_key}  # Jira Software issue key
+        ]})
+        
         if integration:
-            issue["ticketId"] = integration.get("ticketId")
+            if issue.get("issueType") == "Service Request":
+                # This is a JSM ticket, find linked Jira Software issue
+                issue["linkedJiraSoftwareIssue"] = integration.get("jiraIssueKey")
+            else:
+                # This is a Jira Software issue, find linked JSM ticket
+                issue["linkedJsmTicket"] = integration.get("ticketId")
         
         return issue
     except HTTPException:

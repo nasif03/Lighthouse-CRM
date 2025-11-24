@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiGet, apiPost, apiPut, apiDelete, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 type Contact = {
   id: string;
@@ -48,6 +48,7 @@ const formatRelativeTime = (dateString: string): string => {
 };
 
 export default function Contacts() {
+  const navigate = useNavigate();
   const { token } = useAuthStore();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
@@ -341,8 +342,23 @@ export default function Contacts() {
 
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
                   <button
+                    onClick={() => {
+                      const fullName = `${contact.firstName} ${contact.lastName || ''}`.trim();
+                      navigate('/support/create', {
+                        state: {
+                          contactName: fullName,
+                          contactEmail: contact.email,
+                          contactPhone: contact.phone || ''
+                        }
+                      });
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded transition-colors"
+                  >
+                    Create Ticket
+                  </button>
+                  <button
                     onClick={() => handleEdit(contact)}
-                    className="flex-1 px-3 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded transition-colors"
+                    className="px-3 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded transition-colors"
                   >
                     Edit
                   </button>

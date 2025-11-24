@@ -10,11 +10,13 @@ from googleapiclient.errors import HttpError
 from typing import Optional, Dict, List
 from datetime import datetime
 
-# Gmail API scopes
+# Google API scopes (Gmail + Calendar)
+CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.modify'
+    'https://www.googleapis.com/auth/gmail.modify',
+    CALENDAR_SCOPE,
 ]
 
 # Paths

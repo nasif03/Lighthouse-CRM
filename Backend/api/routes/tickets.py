@@ -5,35 +5,19 @@ from datetime import datetime
 from typing import Optional
 from models.ticket import CreateTicketRequest, TicketResponse, UpdateTicketRequest, AssignableEmployeeResponse
 from api.dependencies import get_current_user
-from config.database import tickets_collection, organizations_collection, users_collection, roles_collection
+from config.database import organizations_collection, users_collection, roles_collection, jira_integration_collection
+from config.settings import JIRA_SERVER
 from utils.query_filters import get_user_ids, build_user_filter
+from services.jira_service import (
+    create_jsm_service_request,
+    get_jsm_service_requests,
+    get_jsm_service_request,
+    update_jsm_service_request,
+    create_jira_software_issue,
+    link_jsm_to_jira_software
+)
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
-
-def generate_ticket_number(org_id: str) -> str:
-    """Generate a unique ticket number in format: TKT-YYYYMMDD-XXXX"""
-    from datetime import datetime
-    date_prefix = datetime.utcnow().strftime("%Y%m%d")
-    
-    # Find the highest ticket number for today for this org
-    today_prefix = f"TKT-{date_prefix}-"
-    today_tickets = tickets_collection.find({
-        "orgId": org_id,
-        "ticketNumber": {"$regex": f"^{today_prefix}"}
-    }).sort("ticketNumber", -1).limit(1)
-    
-    last_ticket = list(today_tickets)
-    if last_ticket and last_ticket[0].get("ticketNumber"):
-        # Extract the number part and increment
-        last_num = last_ticket[0]["ticketNumber"].split("-")[-1]
-        try:
-            next_num = int(last_num) + 1
-        except ValueError:
-            next_num = 1
-    else:
-        next_num = 1
-    
-    return f"{today_prefix}{next_num:04d}"
 
 def get_assigned_user_name(user_id: Optional[str]) -> Optional[str]:
     """Get assigned user's name"""
@@ -46,6 +30,40 @@ def get_assigned_user_name(user_id: Optional[str]) -> Optional[str]:
     except:
         pass
     return None
+
+def get_user_id_from_jsm_account_id(jsm_account_id: Optional[str], org_id: str) -> Optional[str]:
+    """Map JSM account ID to CRM user ID"""
+    if not jsm_account_id:
+        return None
+    try:
+        # Try to find user by email (JSM account ID might match email)
+        # For now, we'll need to store JSM account IDs in user documents or use email matching
+        # This is a simplified version - in production, you'd want to store JSM account IDs
+        users = list(users_collection.find({
+            "orgId": org_id
+        }))
+        # TODO: Implement proper JSM account ID mapping
+        # For now, return None and handle assignment differently
+        return None
+    except:
+        return None
+
+def get_jsm_account_id_from_user_id(user_id: Optional[str]) -> Optional[str]:
+    """Map CRM user ID to JSM account ID"""
+    if not user_id:
+        return None
+    try:
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            # TODO: Store JSM account ID in user document
+            # For now, we'll need to look it up via email
+            email = user.get("email")
+            if email:
+                from services.jira_service import get_user_account_id
+                return get_user_account_id(email)
+        return None
+    except:
+        return None
 
 def has_ticket_role(user_doc: dict, org_id: str) -> bool:
     """Check if user has ticket-related role (read:tickets or write:tickets permission)"""
@@ -109,75 +127,127 @@ async def get_tickets(
                 detail="You do not have permission to view tickets. Contact your administrator to assign you a role with ticket permissions."
             )
         
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            return []  # No JSM project configured
+        
+        project_key = org.get("jiraProjectKey")
+        
         # Check if user is admin
         from api.routes.organizations import is_org_admin
         user_is_admin = is_org_admin(user_doc, org_id)
         user_id = str(user_doc["_id"])
         
-        # Build query filter
-        query = {"orgId": org_id}
+        # Build JQL query - don't filter by issue type since JSM projects may use different types
+        jql_parts = [f"project = {project_key}"]
         
-        # Employees can only see tickets assigned to them
-        # Admins can see all tickets
-        if not user_is_admin:
-            query["assignedTo"] = user_id
+        # Employees can only see tickets assigned to them (if we can map JSM account ID)
+        # For now, show all tickets - assignment filtering can be added later
+        # if not user_is_admin:
+        #     jsm_account_id = get_jsm_account_id_from_user_id(user_id)
+        #     if jsm_account_id:
+        #         jql_parts.append(f"assignee = {jsm_account_id}")
         
         if status:
-            query["status"] = status
+            # Map CRM status to JSM status
+            status_map = {
+                "open": "To Do",
+                "in_progress": "In Progress",
+                "resolved": "Done",
+                "closed": "Closed"
+            }
+            jsm_status = status_map.get(status, status)
+            jql_parts.append(f"status = '{jsm_status}'")
+        
         if priority:
-            query["priority"] = priority
-        if assignedTo:
-            query["assignedTo"] = assignedTo
+            # Map CRM priority to JSM priority
+            priority_map = {
+                "low": "Low",
+                "medium": "Medium",
+                "high": "High",
+                "urgent": "Highest"
+            }
+            jsm_priority = priority_map.get(priority, priority)
+            jql_parts.append(f"priority = '{jsm_priority}'")
         
-        # Fetch tickets
-        tickets = list(tickets_collection.find(query).sort("createdAt", -1).skip(skip).limit(limit))
+        jql = " AND ".join(jql_parts) + " ORDER BY created DESC"
         
-        # Get assigned user names
-        assigned_user_ids = [t.get("assignedTo") for t in tickets if t.get("assignedTo")]
-        assigned_users = {}
-        if assigned_user_ids:
-            users = list(users_collection.find({
-                "_id": {"$in": [ObjectId(uid) for uid in assigned_user_ids if ObjectId.is_valid(uid)]}
-            }))
-            assigned_users = {str(u["_id"]): u.get("name", "Unknown") for u in users}
+        # Fetch tickets from JSM
+        jsm_tickets = get_jsm_service_requests(project_key, jql)
         
-        # Get Jira issue info for all tickets
-        from config.database import jira_integration_collection
-        from config.settings import JIRA_SERVER
-        ticket_ids = [str(ticket["_id"]) for ticket in tickets]
-        jira_integrations = list(jira_integration_collection.find({"ticketId": {"$in": ticket_ids}}))
+        # Apply pagination
+        paginated_tickets = jsm_tickets[skip:skip + limit]
+        
+        # Get Jira Software issue links for all tickets
+        from config.database import ticket_metadata_collection
+        ticket_keys = [t["key"] for t in paginated_tickets]
+        jira_integrations = list(jira_integration_collection.find({"jiraIssueKey": {"$in": ticket_keys}}))
         jira_map = {}
         for intg in jira_integrations:
-            ticket_id = intg.get("ticketId")
-            issue_key = intg.get("jiraIssueKey")
-            if ticket_id and issue_key:
-                jira_map[ticket_id] = {
-                    "key": issue_key,
-                    "url": f"{JIRA_SERVER}/browse/{issue_key}"
+            jsm_key = intg.get("jiraIssueKey")
+            jira_key = intg.get("jiraIssueKey")  # This should be the Jira Software issue key
+            if jsm_key and jira_key:
+                jira_map[jsm_key] = {
+                    "key": jira_key,
+                    "url": f"{JIRA_SERVER}/browse/{jira_key}"
                 }
         
-        return [
-            TicketResponse(
-                id=str(ticket["_id"]),
-                ticketNumber=ticket.get("ticketNumber", ""),
-                orgId=ticket.get("orgId", ""),
-                name=ticket.get("name", ""),
-                email=ticket.get("email", ""),
-                phone=ticket.get("phone"),
-                subject=ticket.get("subject", ""),
-                description=ticket.get("description", ""),
-                priority=ticket.get("priority", "medium"),
-                category=ticket.get("category"),
-                status=ticket.get("status", "open"),
-                assignedTo=ticket.get("assignedTo"),
-                assignedToName=assigned_users.get(ticket.get("assignedTo")) if ticket.get("assignedTo") else None,
-                jiraIssueKey=jira_map.get(str(ticket["_id"]), {}).get("key"),
-                jiraIssueUrl=jira_map.get(str(ticket["_id"]), {}).get("url"),
-                createdAt=ticket.get("createdAt").isoformat() if ticket.get("createdAt") else "",
-                updatedAt=ticket.get("updatedAt").isoformat() if ticket.get("updatedAt") else ""
-            )
-            for ticket in tickets
-        ]
+        # Get customer metadata for all tickets
+        ticket_metadata_list = list(ticket_metadata_collection.find({"jsmIssueKey": {"$in": ticket_keys}}))
+        metadata_map = {}
+        for meta in ticket_metadata_list:
+            jsm_key = meta.get("jsmIssueKey")
+            if jsm_key:
+                metadata_map[jsm_key] = meta
+        
+        # Map JSM tickets to TicketResponse
+        result = []
+        for jsm_ticket in paginated_tickets:
+            ticket_key = jsm_ticket["key"]
+            
+            # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
+            metadata = metadata_map.get(ticket_key, {})
+            customer_name = metadata.get("customerName") or jsm_ticket.get("reporterName", "")
+            customer_email = metadata.get("customerEmail") or jsm_ticket.get("reporterEmail", "")
+            customer_phone = metadata.get("customerPhone")
+            customer_category = metadata.get("category")
+            
+            # Map assignee account ID to user ID (simplified - may return None)
+            assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
+            assignee_name = None
+            if assignee_user_id:
+                assignee_name = get_assigned_user_name(assignee_user_id)
+            
+            # Jira link: Use JSM ticket key as the primary link, or Jira Software issue if linked
+            jira_software_key = jira_map.get(ticket_key, {}).get("key")
+            jira_software_url = jira_map.get(ticket_key, {}).get("url")
+            
+            # Always set Jira link to JSM ticket (the ticket itself is in Jira)
+            jira_issue_key = jira_software_key or ticket_key  # Use Jira Software key if linked, otherwise JSM key
+            jira_issue_url = jira_software_url or f"{JIRA_SERVER}/browse/{ticket_key}"  # Always provide JSM ticket URL
+            
+            result.append(TicketResponse(
+                id=ticket_key,  # Use JSM key as ID
+                ticketNumber=ticket_key,  # JSM generates keys like SR-123
+                orgId=org_id,
+                name=customer_name,
+                email=customer_email,
+                phone=customer_phone,
+                subject=jsm_ticket.get("summary", ""),
+                description=jsm_ticket.get("description", ""),
+                priority=jsm_ticket.get("priority", "medium"),
+                category=customer_category,
+                status=jsm_ticket.get("status", "open"),
+                assignedTo=assignee_user_id,
+                assignedToName=assignee_name,
+                jiraIssueKey=jira_issue_key,
+                jiraIssueUrl=jira_issue_url,
+                createdAt=jsm_ticket.get("created", ""),
+                updatedAt=jsm_ticket.get("updated", "")
+            ))
+        
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -267,7 +337,7 @@ async def get_ticket(
     ticket_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get a single ticket by ID - requires ticket role"""
+    """Get a single ticket by ID (JSM issue key) - requires ticket role"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -284,68 +354,90 @@ async def get_ticket(
                 detail="You do not have permission to view tickets."
             )
         
-        # Validate ticket_id is a valid ObjectId
-        if not ObjectId.is_valid(ticket_id):
-            raise HTTPException(status_code=400, detail="Invalid ticket ID format")
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            raise HTTPException(status_code=404, detail="Organization JSM project not configured")
+        
+        project_key = org.get("jiraProjectKey")
         
         # Check if user is admin
         from api.routes.organizations import is_org_admin
         user_is_admin = is_org_admin(user_doc, org_id)
         user_id = str(user_doc["_id"])
         
-        # Fetch ticket
-        ticket = tickets_collection.find_one({
-            "_id": ObjectId(ticket_id),
-            "orgId": org_id
-        })
+        # Fetch ticket from JSM (ticket_id is now a JSM issue key like "SR-123")
+        jsm_ticket = get_jsm_service_request(ticket_id)
         
-        if not ticket:
+        if not jsm_ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         
-        # Employees can only view tickets assigned to them
-        if not user_is_admin:
-            if ticket.get("assignedTo") != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only view tickets assigned to you."
-                )
+        # Verify ticket belongs to this organization's project
+        if not ticket_id.startswith(project_key):
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Employees can only view tickets assigned to them (if we can map)
+        # For now, allow all users with ticket role to view
+        # if not user_is_admin:
+        #     assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
+        #     if assignee_user_id != user_id:
+        #         raise HTTPException(
+        #             status_code=403,
+        #             detail="You can only view tickets assigned to you."
+        #         )
         
         # Get assigned user name if assigned
+        assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
         assigned_to_name = None
-        if ticket.get("assignedTo"):
-            assigned_user = users_collection.find_one({"_id": ObjectId(ticket["assignedTo"])})
-            if assigned_user:
-                assigned_to_name = assigned_user.get("name", "Unknown")
+        if assignee_user_id:
+            assigned_to_name = get_assigned_user_name(assignee_user_id)
         
-        # Get Jira issue info if linked
-        from config.database import jira_integration_collection
-        jira_issue_key = None
-        jira_issue_url = None
-        jira_integration = jira_integration_collection.find_one({"ticketId": ticket_id})
+        # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
+        from config.settings import JIRA_SERVER
+        from config.database import ticket_metadata_collection
+        metadata = ticket_metadata_collection.find_one({"jsmIssueKey": ticket_id})
+        customer_name = metadata.get("customerName") if metadata else None
+        customer_email = metadata.get("customerEmail") if metadata else None
+        customer_phone = metadata.get("customerPhone") if metadata else None
+        customer_category = metadata.get("category") if metadata else None
+        
+        # Use customer metadata if available, otherwise fallback to JSM reporter
+        final_name = customer_name or jsm_ticket.get("reporterName", "")
+        final_email = customer_email or jsm_ticket.get("reporterEmail", "")
+        
+        # Get Jira Software issue info if linked
+        jira_software_key = None
+        jira_software_url = None
+        jira_integration = jira_integration_collection.find_one({"jiraIssueKey": ticket_id})
         if jira_integration:
-            jira_issue_key = jira_integration.get("jiraIssueKey")
-            if jira_issue_key:
-                from config.settings import JIRA_SERVER
-                jira_issue_url = f"{JIRA_SERVER}/browse/{jira_issue_key}"
+            # This integration links JSM ticket to Jira Software issue
+            # The jiraIssueKey in integration is the Jira Software issue key
+            jira_software_key = jira_integration.get("jiraIssueKey")
+            if jira_software_key and jira_software_key != ticket_id:
+                jira_software_url = f"{JIRA_SERVER}/browse/{jira_software_key}"
+        
+        # Always set Jira link to JSM ticket (the ticket itself is in Jira)
+        jira_issue_key = jira_software_key or ticket_id  # Use Jira Software key if linked, otherwise JSM key
+        jira_issue_url = jira_software_url or f"{JIRA_SERVER}/browse/{ticket_id}"  # Always provide JSM ticket URL
         
         return TicketResponse(
-            id=str(ticket["_id"]),
-            ticketNumber=ticket.get("ticketNumber", ""),
-            orgId=ticket.get("orgId", ""),
-            name=ticket.get("name", ""),
-            email=ticket.get("email", ""),
-            phone=ticket.get("phone"),
-            subject=ticket.get("subject", ""),
-            description=ticket.get("description", ""),
-            priority=ticket.get("priority", "medium"),
-            category=ticket.get("category"),
-            status=ticket.get("status", "open"),
-            assignedTo=ticket.get("assignedTo"),
+            id=jsm_ticket["key"],
+            ticketNumber=jsm_ticket["key"],
+            orgId=org_id,
+            name=final_name,
+            email=final_email,
+            phone=customer_phone,
+            subject=jsm_ticket.get("summary", ""),
+            description=jsm_ticket.get("description", ""),
+            priority=jsm_ticket.get("priority", "medium"),
+            category=customer_category,
+            status=jsm_ticket.get("status", "open"),
+            assignedTo=assignee_user_id,
             assignedToName=assigned_to_name,
             jiraIssueKey=jira_issue_key,
             jiraIssueUrl=jira_issue_url,
-            createdAt=ticket.get("createdAt").isoformat() if ticket.get("createdAt") else "",
-            updatedAt=ticket.get("updatedAt").isoformat() if ticket.get("updatedAt") else ""
+            createdAt=jsm_ticket.get("created", ""),
+            updatedAt=jsm_ticket.get("updated", "")
         )
     except HTTPException:
         raise
@@ -376,33 +468,37 @@ async def update_ticket(
                 detail="You do not have permission to update tickets."
             )
         
+        # Get organization JSM project
+        org = organizations_collection.find_one({"_id": ObjectId(org_id)})
+        if not org or not org.get("jiraProjectKey"):
+            raise HTTPException(status_code=404, detail="Organization JSM project not configured")
+        
+        project_key = org.get("jiraProjectKey")
+        
         # Check if user is admin (only admins can assign tickets)
         from api.routes.organizations import is_org_admin
         user_is_admin = is_org_admin(user_doc, org_id)
         user_id = str(user_doc["_id"])
         
-        # Fetch ticket
-        ticket = tickets_collection.find_one({
-            "_id": ObjectId(ticket_id),
-            "orgId": org_id
-        })
+        # Fetch ticket from JSM
+        jsm_ticket = get_jsm_service_request(ticket_id)
         
-        if not ticket:
+        if not jsm_ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Verify ticket belongs to this organization's project
+        if not ticket_id.startswith(project_key):
             raise HTTPException(status_code=404, detail="Ticket not found")
         
         # Employees can only update tickets assigned to them (unless they're admin)
-        if not user_is_admin:
-            if ticket.get("assignedTo") != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You can only update tickets assigned to you."
-                )
-            # Employees cannot change assignment
-            if request.assignedTo is not None and request.assignedTo != ticket.get("assignedTo"):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Only administrators can assign or reassign tickets."
-                )
+        # For now, allow all users with ticket role to update
+        # if not user_is_admin:
+        #     assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
+        #     if assignee_user_id != user_id:
+        #         raise HTTPException(
+        #             status_code=403,
+        #             detail="You can only update tickets assigned to you."
+        #         )
         
         # Only admins can assign tickets
         if request.assignedTo is not None and not user_is_admin:
@@ -412,6 +508,7 @@ async def update_ticket(
             )
         
         # Validate assignedTo if provided (admin only)
+        assignee_account_id = None
         if request.assignedTo and user_is_admin:
             # Verify the employee exists
             employee = users_collection.find_one({"_id": ObjectId(request.assignedTo)})
@@ -435,64 +532,71 @@ async def update_ticket(
                     status_code=400,
                     detail="This employee does not have ticket permissions. Please assign them a role with ticket permissions (read:tickets or write:tickets) first."
                 )
+            
+            # Get JSM account ID for the employee
+            assignee_account_id = get_jsm_account_id_from_user_id(request.assignedTo)
         
-        # Build update data
-        update_data = {"updatedAt": datetime.utcnow()}
-        
-        if request.status:
-            update_data["status"] = request.status
-        if request.priority:
-            update_data["priority"] = request.priority
-        if request.assignedTo is not None:
-            update_data["assignedTo"] = request.assignedTo if request.assignedTo else None
-        if request.category is not None:
-            update_data["category"] = request.category
-        
-        # Update ticket
-        tickets_collection.update_one(
-            {"_id": ObjectId(ticket_id)},
-            {"$set": update_data}
+        # Update ticket in JSM
+        updated_jsm_ticket = update_jsm_service_request(
+            issue_key=ticket_id,
+            status=request.status,
+            priority=request.priority,
+            assignee_account_id=assignee_account_id
         )
         
-        # Fetch updated ticket
-        updated_ticket = tickets_collection.find_one({"_id": ObjectId(ticket_id)})
+        if not updated_jsm_ticket:
+            raise HTTPException(status_code=500, detail="Failed to update ticket in JSM")
         
         # Get assigned user name if assigned
+        assignee_user_id = get_user_id_from_jsm_account_id(updated_jsm_ticket.get("assigneeAccountId"), org_id)
         assigned_to_name = None
-        if updated_ticket.get("assignedTo"):
-            assigned_user = users_collection.find_one({"_id": ObjectId(updated_ticket["assignedTo"])})
-            if assigned_user:
-                assigned_to_name = assigned_user.get("name", "Unknown")
+        if assignee_user_id:
+            assigned_to_name = get_assigned_user_name(assignee_user_id)
         
-        # Get Jira issue info if linked
-        from config.database import jira_integration_collection
-        jira_issue_key = None
-        jira_issue_url = None
-        jira_integration = jira_integration_collection.find_one({"ticketId": ticket_id})
+        # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
+        from config.settings import JIRA_SERVER
+        from config.database import ticket_metadata_collection
+        metadata = ticket_metadata_collection.find_one({"jsmIssueKey": ticket_id})
+        customer_name = metadata.get("customerName") if metadata else None
+        customer_email = metadata.get("customerEmail") if metadata else None
+        customer_phone = metadata.get("customerPhone") if metadata else None
+        customer_category = metadata.get("category") if metadata else None
+        
+        # Use customer metadata if available, otherwise fallback to JSM reporter
+        final_name = customer_name or updated_jsm_ticket.get("reporterName", "")
+        final_email = customer_email or updated_jsm_ticket.get("reporterEmail", "")
+        
+        # Get Jira Software issue info if linked
+        jira_software_key = None
+        jira_software_url = None
+        jira_integration = jira_integration_collection.find_one({"jiraIssueKey": ticket_id})
         if jira_integration:
-            jira_issue_key = jira_integration.get("jiraIssueKey")
-            if jira_issue_key:
-                from config.settings import JIRA_SERVER
-                jira_issue_url = f"{JIRA_SERVER}/browse/{jira_issue_key}"
+            jira_software_key = jira_integration.get("jiraIssueKey")
+            if jira_software_key and jira_software_key != ticket_id:
+                jira_software_url = f"{JIRA_SERVER}/browse/{jira_software_key}"
+        
+        # Always set Jira link to JSM ticket (the ticket itself is in Jira)
+        jira_issue_key = jira_software_key or ticket_id  # Use Jira Software key if linked, otherwise JSM key
+        jira_issue_url = jira_software_url or f"{JIRA_SERVER}/browse/{ticket_id}"  # Always provide JSM ticket URL
         
         return TicketResponse(
-            id=str(updated_ticket["_id"]),
-            ticketNumber=updated_ticket.get("ticketNumber", ""),
-            orgId=updated_ticket.get("orgId", ""),
-            name=updated_ticket.get("name", ""),
-            email=updated_ticket.get("email", ""),
-            phone=updated_ticket.get("phone"),
-            subject=updated_ticket.get("subject", ""),
-            description=updated_ticket.get("description", ""),
-            priority=updated_ticket.get("priority", "medium"),
-            category=updated_ticket.get("category"),
-            status=updated_ticket.get("status", "open"),
-            assignedTo=updated_ticket.get("assignedTo"),
+            id=updated_jsm_ticket["key"],
+            ticketNumber=updated_jsm_ticket["key"],
+            orgId=org_id,
+            name=final_name,
+            email=final_email,
+            phone=customer_phone,
+            subject=updated_jsm_ticket.get("summary", ""),
+            description=updated_jsm_ticket.get("description", ""),
+            priority=updated_jsm_ticket.get("priority", "medium"),
+            category=customer_category,
+            status=updated_jsm_ticket.get("status", "open"),
+            assignedTo=assignee_user_id,
             assignedToName=assigned_to_name,
             jiraIssueKey=jira_issue_key,
             jiraIssueUrl=jira_issue_url,
-            createdAt=updated_ticket.get("createdAt").isoformat() if updated_ticket.get("createdAt") else "",
-            updatedAt=updated_ticket.get("updatedAt").isoformat() if updated_ticket.get("updatedAt") else ""
+            createdAt=updated_jsm_ticket.get("created", ""),
+            updatedAt=updated_jsm_ticket.get("updated", "")
         )
     except HTTPException:
         raise
@@ -505,6 +609,7 @@ async def create_ticket(request: CreateTicketRequest):
     """
     Create a new support ticket (PUBLIC ENDPOINT - No authentication required)
     Customers can submit tickets via this endpoint
+    All tickets are created in JSM. Bug reports and feature requests are also linked to Jira Software.
     """
     try:
         # Validate that organization exists
@@ -512,111 +617,138 @@ async def create_ticket(request: CreateTicketRequest):
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
         
-        now = datetime.utcnow()
-        ticket_number = generate_ticket_number(request.orgId)
+        # Check if organization has JSM project configured
+        if not org.get("jiraProjectKey"):
+            raise HTTPException(status_code=400, detail="Organization does not have JSM project configured. Please contact administrator.")
         
-        ticket_data = {
-            "ticketNumber": ticket_number,
-            "orgId": request.orgId,
-            "name": request.name,
-            "email": request.email,
-            "phone": request.phone or "",
-            "subject": request.subject,
-            "description": request.description,
-            "priority": request.priority or "medium",
-            "category": request.category or "",
-            "status": "open",
-            "assignedTo": None,
-            "createdAt": now,
-            "updatedAt": now,
-        }
+        project_key = org.get("jiraProjectKey")
         
-        result = tickets_collection.insert_one(ticket_data)
-        ticket_id = str(result.inserted_id)
-        
-        # Auto-assign ticket to an employee with ticket role
-        assigned_employee_id = None
-        try:
-            from services.ticket_assignment import auto_assign_ticket
-            assigned_employee_id = auto_assign_ticket(request.orgId, ticket_id)
-            if assigned_employee_id:
-                tickets_collection.update_one(
-                    {"_id": ObjectId(ticket_id)},
-                    {"$set": {"assignedTo": assigned_employee_id, "updatedAt": datetime.utcnow()}}
-                )
-                ticket_data["assignedTo"] = assigned_employee_id
-        except Exception as e:
-            print(f"Failed to auto-assign ticket {ticket_id}: {str(e)}")
-            # Don't fail ticket creation if auto-assignment fails
-        
-        # Auto-create Jira issue if organization has Jira project
-        jira_issue_key = None
-        jira_issue_url = None
-        try:
-            if org.get("jiraProjectKey"):
-                from services.jira_service import create_jira_issue
-                from config.database import jira_integration_collection
-                
-                project_key = org.get("jiraProjectKey")
-                issue_type = "Task"
-                if request.category == "bug_report":
-                    issue_type = "Bug"
-                elif request.category == "feature_request":
-                    issue_type = "Story"
-                
-                summary = f"[{ticket_number}] {request.subject}"
-                description = f"""Ticket Number: {ticket_number}
-Customer: {request.name} ({request.email})
+        # Create JSM Service Request (always)
+        summary = request.subject
+        description = f"""Customer: {request.name} ({request.email})
+Phone: {request.phone or 'N/A'}
 Priority: {request.priority or 'medium'}
 Category: {request.category or 'N/A'}
 
 Description:
 {request.description}
 """
-                
-                issue_info = create_jira_issue(project_key, summary, description, issue_type)
-                if issue_info:
-                    jira_issue_key = issue_info["issueKey"]
-                    jira_issue_url = issue_info["issueUrl"]
-                    jira_integration_collection.insert_one({
-                        "orgId": request.orgId,
-                        "ticketId": ticket_id,
-                        "jiraIssueKey": issue_info["issueKey"],
-                        "jiraIssueId": issue_info["issueId"],
-                        "jiraProjectKey": project_key,
-                        "syncDirection": "ticket_to_jira",
-                        "status": "active",
-                        "lastSyncedAt": datetime.utcnow(),
-                        "createdAt": datetime.utcnow(),
-                        "updatedAt": datetime.utcnow()
-                    })
-        except Exception as e:
-            print(f"Failed to create Jira issue for ticket {ticket_id}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            # Don't fail ticket creation if Jira creation fails
         
-        # Get assigned user name
-        assigned_to_name = get_assigned_user_name(assigned_employee_id) if assigned_employee_id else None
+        jsm_ticket = create_jsm_service_request(
+            project_key=project_key,
+            summary=summary,
+            description=description,
+            reporter_email=request.email,
+            reporter_name=request.name,
+            priority=request.priority or "medium"
+        )
+        
+        if not jsm_ticket:
+            raise HTTPException(status_code=500, detail="Failed to create ticket in JSM")
+        
+        jsm_issue_key = jsm_ticket["issueKey"]
+        now = datetime.utcnow()
+        
+        # Store customer metadata in MongoDB (linked to JSM issue key)
+        from config.database import ticket_metadata_collection
+        ticket_metadata_collection.insert_one({
+            "jsmIssueKey": jsm_issue_key,
+            "orgId": request.orgId,
+            "customerName": request.name,
+            "customerEmail": request.email,
+            "customerPhone": request.phone,
+            "category": request.category,
+            "createdAt": now,
+            "updatedAt": now
+        })
+        
+        # If category is bug_report or feature_request, also create Jira Software issue
+        jira_software_issue_key = None
+        jira_software_issue_url = None
+        
+        if request.category in ["bug_report", "feature_request"]:
+            # Check if organization has Jira Software project
+            jira_software_project_key = org.get("jiraSoftwareProjectKey")
+            
+            if jira_software_project_key:
+                try:
+                    issue_type = "Bug" if request.category == "bug_report" else "Story"
+                    jira_summary = f"[{jsm_issue_key}] {request.subject}"
+                    jira_description = f"""JSM Service Request: {jsm_issue_key}
+Customer: {request.name} ({request.email})
+Priority: {request.priority or 'medium'}
+
+Description:
+{request.description}
+"""
+                    
+                    jira_issue_info = create_jira_software_issue(
+                        project_key=jira_software_project_key,
+                        summary=jira_summary,
+                        description=jira_description,
+                        issue_type=issue_type
+                    )
+                    
+                    if jira_issue_info:
+                        jira_software_issue_key = jira_issue_info["issueKey"]
+                        jira_software_issue_url = jira_issue_info["issueUrl"]
+                        
+                        # Link JSM ticket to Jira Software issue
+                        link_success = link_jsm_to_jira_software(jsm_issue_key, jira_software_issue_key)
+                        
+                        if link_success:
+                            # Store integration record
+                            jira_integration_collection.insert_one({
+                                "orgId": request.orgId,
+                                "ticketId": jsm_issue_key,  # JSM issue key
+                                "jiraIssueKey": jira_software_issue_key,  # Jira Software issue key
+                                "jiraIssueId": jira_issue_info["issueId"],
+                                "jiraProjectKey": jira_software_project_key,
+                                "syncDirection": "jsm_to_jira_software",
+                                "status": "active",
+                                "lastSyncedAt": datetime.utcnow(),
+                                "createdAt": datetime.utcnow(),
+                                "updatedAt": datetime.utcnow()
+                            })
+                except Exception as e:
+                    print(f"Failed to create Jira Software issue for ticket {jsm_issue_key}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    # Don't fail ticket creation if Jira Software creation fails
+        
+        # Get the created JSM ticket details
+        created_jsm_ticket = get_jsm_service_request(jsm_issue_key)
+        if not created_jsm_ticket:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created ticket")
+        
+        # Get assigned user info (if any)
+        assignee_user_id = get_user_id_from_jsm_account_id(created_jsm_ticket.get("assigneeAccountId"), request.orgId)
+        assigned_to_name = None
+        if assignee_user_id:
+            assigned_to_name = get_assigned_user_name(assignee_user_id)
+        
+        # Always set Jira link to JSM ticket (the ticket itself is in Jira)
+        jira_issue_key = jira_software_issue_key or jsm_issue_key  # Use Jira Software key if linked, otherwise JSM key
+        jira_issue_url = jira_software_issue_url or f"{JIRA_SERVER}/browse/{jsm_issue_key}"  # Always provide JSM ticket URL
         
         return TicketResponse(
-            id=ticket_id,
-            ticketNumber=ticket_number,
+            id=created_jsm_ticket["key"],
+            ticketNumber=created_jsm_ticket["key"],  # JSM generates keys like SR-123
             orgId=request.orgId,
-            name=request.name,
-            email=request.email,
-            phone=request.phone,
-            subject=request.subject,
-            description=request.description,
-            priority=request.priority or "medium",
+            name=request.name,  # Use customer name from request (stored in metadata)
+            email=request.email,  # Use customer email from request (stored in metadata)
+            phone=request.phone,  # Use customer phone from request (stored in metadata)
+            subject=created_jsm_ticket.get("summary", request.subject),
+            description=created_jsm_ticket.get("description", request.description),
+            priority=created_jsm_ticket.get("priority", request.priority or "medium"),
             category=request.category,
-            status="open",
-            assignedTo=assigned_employee_id,
+            status=created_jsm_ticket.get("status", "open"),
+            assignedTo=assignee_user_id,
             assignedToName=assigned_to_name,
             jiraIssueKey=jira_issue_key,
             jiraIssueUrl=jira_issue_url,
-            createdAt=now.isoformat(),
-            updatedAt=now.isoformat()
+            createdAt=created_jsm_ticket.get("created", now.isoformat()),
+            updatedAt=created_jsm_ticket.get("updated", now.isoformat())
         )
     except HTTPException:
         raise

@@ -1,9 +1,18 @@
 import { create } from 'zustand';
-import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser, GoogleAuthProvider } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
 import { apiPost } from '../utils/api';
 
 type User = { id: string; name: string; email: string; picture?: string; orgId?: string } | null;
+
+type MeetingPayload = {
+  title: string;
+  startTime: string;
+  endTime: string;
+  attendees: string[];
+  description?: string;
+  timezone?: string;
+};
 
 type AuthState = {
   user: User;
@@ -13,6 +22,11 @@ type AuthState = {
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   initializeAuth: () => void;
+  createMeeting: (payload: MeetingPayload) => Promise<{
+    event_id: string;
+    hangout_link?: string;
+    html_link?: string;
+  }>;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -53,7 +67,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const idToken = await result.user.getIdToken();
       
       // Get OAuth credential for Gmail access
-      const credential = googleProvider.credentialFromResult(result);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
       const accessToken = credential?.accessToken;
       const oauthIdToken = credential?.idToken;
       
@@ -86,6 +100,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
+
+  createMeeting: async (payload: MeetingPayload) => {
+    const token = get().token;
+    if (!token) throw new Error("User not authenticated");
+
+    try {
+      const response = await apiPost<{
+        event_id: string;
+        hangout_link?: string;
+        html_link?: string;
+      }>(
+        '/api/calendar/meetings',
+        token,
+        {
+          title: payload.title,
+          start_time: payload.startTime,
+          end_time: payload.endTime,
+          attendees: payload.attendees,
+          description: payload.description,
+          timezone: payload.timezone,
+        },
+        { skipCache: true }
+      );
+
+      return response;
+    } catch (err) {
+      console.error("Error creating meeting:", err);
+      throw err;
+    }
+  },
+  
   
   initializeAuth: () => {
     set({ isLoading: true });

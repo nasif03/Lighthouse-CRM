@@ -1,7 +1,7 @@
 """Ticket auto-assignment service"""
 from typing import Optional
 from bson import ObjectId
-from config.database import users_collection, tickets_collection
+from config.database import users_collection
 
 
 def get_assignable_employees(org_id: str) -> list[dict]:
@@ -43,6 +43,10 @@ def auto_assign_ticket(org_id: str, ticket_id: Optional[str] = None) -> Optional
     """
     Auto-assign a ticket to an employee using round-robin algorithm.
     
+    Note: With JSM, assignment is typically handled by JSM's built-in assignment rules.
+    This function can still be used to get a suggested assignee, but actual assignment
+    should be done via JSM API.
+    
     Args:
         org_id: Organization ID
         ticket_id: Optional ticket ID (for logging)
@@ -55,27 +59,12 @@ def auto_assign_ticket(org_id: str, ticket_id: Optional[str] = None) -> Optional
     if not assignable_employees:
         return None
     
-    # Get current ticket counts for each employee (for load balancing)
-    employee_ticket_counts = {}
-    for emp in assignable_employees:
-        emp_id = str(emp["_id"])
-        # Count open/in_progress tickets assigned to this employee
-        count = tickets_collection.count_documents({
-            "orgId": org_id,
-            "assignedTo": emp_id,
-            "status": {"$in": ["open", "in_progress"]}
-        })
-        employee_ticket_counts[emp_id] = count
+    # With JSM, we can't easily count tickets per employee without querying JSM
+    # For now, use simple round-robin (first employee)
+    # In production, you might want to query JSM to get ticket counts
     
-    # Sort by ticket count (least loaded first)
-    sorted_employees = sorted(
-        assignable_employees,
-        key=lambda emp: employee_ticket_counts.get(str(emp["_id"]), 0)
-    )
-    
-    # Assign to employee with least tickets (round-robin style)
-    if sorted_employees:
-        assigned_employee_id = str(sorted_employees[0]["_id"])
+    if assignable_employees:
+        assigned_employee_id = str(assignable_employees[0]["_id"])
         return assigned_employee_id
     
     return None
