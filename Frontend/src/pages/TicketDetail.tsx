@@ -4,6 +4,7 @@ import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { clsx } from 'clsx';
@@ -376,12 +377,23 @@ export default function TicketDetail() {
                       Internal note (not visible to customer)
                     </label>
                   </div>
-                  <Textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder={isInternalNote ? 'Add an internal note...' : 'Add a comment or reply...'}
-                    rows={4}
-                  />
+                  <div>
+                    <Textarea
+                      value={newComment}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value.length <= VALIDATION_LIMITS.NOTES) {
+                          setNewComment(value);
+                        }
+                      }}
+                      placeholder={isInternalNote ? 'Add an internal note...' : 'Add a comment or reply...'}
+                      rows={4}
+                      maxLength={VALIDATION_LIMITS.NOTES}
+                    />
+                    <div className="text-xs text-gray-400 mt-1 text-right">
+                      {newComment.length}/{VALIDATION_LIMITS.NOTES} characters
+                    </div>
+                  </div>
                   <div className="flex justify-end">
                     <Button onClick={handleAddComment} disabled={!newComment.trim()}>
                       {isInternalNote ? 'Add Note' : 'Add Comment'}

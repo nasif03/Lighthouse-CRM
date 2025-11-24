@@ -1,5 +1,6 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Modal from '../components/ui/Modal';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
@@ -253,8 +254,14 @@ export default function Contacts() {
           <Input 
             placeholder="Search contacts..." 
             value={query} 
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+                setQuery(value);
+              }
+            }}
             className="w-64"
+            maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
           />
           <Button onClick={() => {
             setError(null);
@@ -396,8 +403,14 @@ export default function Contacts() {
               type="text"
               placeholder="Enter first name"
               value={formData.firstName}
-              onChange={(e) => handleInputChange('firstName', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.NAME) {
+                  handleInputChange('firstName', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.NAME}
             />
           </div>
 
@@ -410,7 +423,13 @@ export default function Contacts() {
               type="text"
               placeholder="Enter last name"
               value={formData.lastName}
-              onChange={(e) => handleInputChange('lastName', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.NAME) {
+                  handleInputChange('lastName', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.NAME}
             />
           </div>
 
@@ -423,8 +442,14 @@ export default function Contacts() {
               type="email"
               placeholder="Enter email address"
               value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.EMAIL) {
+                  handleInputChange('email', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.EMAIL}
             />
           </div>
 
@@ -437,7 +462,13 @@ export default function Contacts() {
               type="tel"
               placeholder="Enter phone number"
               value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.PHONE) {
+                  handleInputChange('phone', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.PHONE}
             />
           </div>
 
@@ -450,7 +481,13 @@ export default function Contacts() {
               type="text"
               placeholder="Enter job title"
               value={formData.title}
-              onChange={(e) => handleInputChange('title', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.TITLE) {
+                  handleInputChange('title', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.TITLE}
             />
           </div>
 

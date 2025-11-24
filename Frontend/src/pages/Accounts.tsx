@@ -1,5 +1,6 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import Modal from '../components/ui/Modal';
@@ -364,7 +365,13 @@ export default function Accounts() {
         <Input 
           placeholder="Search accounts" 
           value={query} 
-          onChange={(e) => setQuery(e.target.value)} 
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+              setQuery(value);
+            }
+          }} 
+          maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
         />
         <Button onClick={() => {
           setError(null);
@@ -456,8 +463,14 @@ export default function Accounts() {
               type="text"
               placeholder="Enter account name"
               value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.COMPANY_NAME) {
+                  handleInputChange('name', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.COMPANY_NAME}
             />
           </div>
 
@@ -470,7 +483,13 @@ export default function Accounts() {
               type="text"
               placeholder="Enter domain"
               value={formData.domain}
-              onChange={(e) => handleInputChange('domain', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.DOMAIN) {
+                  handleInputChange('domain', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.DOMAIN}
             />
           </div>
 
@@ -483,7 +502,13 @@ export default function Accounts() {
               type="text"
               placeholder="Enter industry"
               value={formData.industry}
-              onChange={(e) => handleInputChange('industry', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.INDUSTRY) {
+                  handleInputChange('industry', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.INDUSTRY}
             />
           </div>
 
@@ -496,7 +521,13 @@ export default function Accounts() {
               type="tel"
               placeholder="Enter phone number"
               value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.PHONE) {
+                  handleInputChange('phone', value);
+                }
+              }}
+              maxLength={VALIDATION_LIMITS.PHONE}
             />
           </div>
 

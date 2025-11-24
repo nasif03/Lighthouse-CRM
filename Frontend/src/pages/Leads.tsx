@@ -1,5 +1,6 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Modal from '../components/ui/Modal';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
@@ -507,8 +508,14 @@ export default function Leads() {
           <Input 
             placeholder="Search leads..." 
             value={query} 
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+                setQuery(value);
+              }
+            }}
             className="w-64"
+            maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
           />
           <Button onClick={() => {
             setError(null);
@@ -688,8 +695,14 @@ export default function Leads() {
               type="text"
               placeholder="Enter lead name"
               value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.NAME) {
+                  handleInputChange('name', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.NAME}
             />
           </div>
 
@@ -702,8 +715,14 @@ export default function Leads() {
               type="email"
               placeholder="Enter email address"
               value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.EMAIL) {
+                  handleInputChange('email', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.EMAIL}
             />
           </div>
 
@@ -716,8 +735,14 @@ export default function Leads() {
               type="text"
               placeholder="Enter lead source"
               value={formData.source}
-              onChange={(e) => handleInputChange('source', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.SOURCE) {
+                  handleInputChange('source', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.SOURCE}
             />
           </div>
 

@@ -5,6 +5,7 @@ import { useJitsiStore } from '../../store/jitsiStore';
 import JitsiCall from '../jitsi/JitsiCall';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import { VALIDATION_LIMITS } from '../../utils/validation';
 
 function JitsiCallButton({ 
   participantId, 
@@ -188,7 +189,12 @@ export default function ConversationView() {
           <Input
             placeholder="Type a message..."
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.length <= VALIDATION_LIMITS.CHAT_MESSAGE) {
+                setInputValue(value);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -196,6 +202,7 @@ export default function ConversationView() {
               }
             }}
             className="flex-1"
+            maxLength={VALIDATION_LIMITS.CHAT_MESSAGE}
           />
           <Button onClick={handleSend} disabled={!inputValue.trim()}>
             Send

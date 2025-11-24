@@ -1,5 +1,6 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Modal from '../components/ui/Modal';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../store/authStore';
@@ -365,8 +366,14 @@ export default function Deals() {
           <Input 
             placeholder="Search deals..." 
             value={query} 
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+                setQuery(value);
+              }
+            }}
             className="w-64"
+            maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
           />
           <Button onClick={() => {
             setError(null);
@@ -512,8 +519,14 @@ export default function Deals() {
               type="text"
               placeholder="Enter deal name"
               value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value.length <= VALIDATION_LIMITS.SUBJECT) {
+                  handleInputChange('name', value);
+                }
+              }}
               required
+              maxLength={VALIDATION_LIMITS.SUBJECT}
             />
           </div>
 

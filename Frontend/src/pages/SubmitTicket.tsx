@@ -1,5 +1,6 @@
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
@@ -164,8 +165,14 @@ export default function SubmitTicket() {
                   type="text"
                   placeholder="Enter your full name"
                   value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.NAME) {
+                      handleInputChange('name', value);
+                    }
+                  }}
                   required
+                  maxLength={VALIDATION_LIMITS.NAME}
                 />
               </div>
 
@@ -178,8 +185,14 @@ export default function SubmitTicket() {
                   type="email"
                   placeholder="Enter your email"
                   value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.EMAIL) {
+                      handleInputChange('email', value);
+                    }
+                  }}
                   required
+                  maxLength={VALIDATION_LIMITS.EMAIL}
                 />
               </div>
             </div>
@@ -194,7 +207,13 @@ export default function SubmitTicket() {
                   type="tel"
                   placeholder="Enter your phone number"
                   value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.PHONE) {
+                      handleInputChange('phone', value);
+                    }
+                  }}
+                  maxLength={VALIDATION_LIMITS.PHONE}
                 />
               </div>
 
@@ -240,29 +259,51 @@ export default function SubmitTicket() {
               <label htmlFor="subject" className="text-sm font-medium text-gray-700">
                 Subject *
               </label>
-              <Input
-                id="subject"
-                type="text"
-                placeholder="Brief description of your issue"
-                value={formData.subject}
-                onChange={(e) => handleInputChange('subject', e.target.value)}
-                required
-              />
+              <div>
+                <Input
+                  id="subject"
+                  type="text"
+                  placeholder="Brief description of your issue"
+                  value={formData.subject}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.TICKET_SUBJECT) {
+                      handleInputChange('subject', value);
+                    }
+                  }}
+                  required
+                  maxLength={VALIDATION_LIMITS.TICKET_SUBJECT}
+                />
+                <div className="text-xs text-gray-400 mt-1 text-right">
+                  {formData.subject.length}/{VALIDATION_LIMITS.TICKET_SUBJECT} characters
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
               <label htmlFor="description" className="text-sm font-medium text-gray-700">
                 Description *
               </label>
-              <textarea
-                id="description"
-                rows={6}
-                className="px-3 py-2 rounded-md border border-gray-200 bg-white text-sm outline-none focus:ring-2 focus:ring-brand-500 shadow-sm resize-none"
-                placeholder="Please provide detailed information about your issue..."
-                value={formData.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
-                required
-              />
+              <div>
+                <textarea
+                  id="description"
+                  rows={6}
+                  className="px-3 py-2 rounded-md border border-gray-200 bg-white text-sm outline-none focus:ring-2 focus:ring-brand-500 shadow-sm resize-none"
+                  placeholder="Please provide detailed information about your issue..."
+                  value={formData.description}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.TICKET_DESCRIPTION) {
+                      handleInputChange('description', value);
+                    }
+                  }}
+                  required
+                  maxLength={VALIDATION_LIMITS.TICKET_DESCRIPTION}
+                />
+                <div className="text-xs text-gray-400 mt-1 text-right">
+                  {formData.description.length}/{VALIDATION_LIMITS.TICKET_DESCRIPTION} characters
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">

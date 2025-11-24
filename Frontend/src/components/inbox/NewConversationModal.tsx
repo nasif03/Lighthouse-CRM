@@ -4,6 +4,7 @@ import { useInboxStore } from '../../store/inboxStore';
 import { apiGet, apiPost } from '../../utils/api';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import { VALIDATION_LIMITS } from '../../utils/validation';
 
 type Employee = {
   id?: string;  // API might return 'id'
@@ -115,8 +116,14 @@ export default function NewConversationModal({ isOpen, onClose }: Props) {
           <Input
             placeholder="Search by name or email..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+                setSearchQuery(value);
+              }
+            }}
             className="w-full"
+            maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
           />
         </div>
 

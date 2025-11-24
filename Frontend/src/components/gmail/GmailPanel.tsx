@@ -4,6 +4,7 @@ import { useGmailStore } from '../../store/gmailStore';
 import Button from '../ui/Button';
 import Card, { CardContent, CardHeader } from '../ui/Card';
 import Input from '../ui/Input';
+import { VALIDATION_LIMITS } from '../../utils/validation';
 
 // Toast notification component
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -682,20 +683,38 @@ export default function GmailPanel() {
                   <input
                     type="text"
                     value={composeSubject}
-                    onChange={(e) => setComposeSubject(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= VALIDATION_LIMITS.EMAIL_SUBJECT) {
+                        setComposeSubject(value);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     placeholder="Subject"
+                    maxLength={VALIDATION_LIMITS.EMAIL_SUBJECT}
                   />
+                  <div className="text-xs text-gray-400 mt-1 text-right">
+                    {composeSubject.length}/{VALIDATION_LIMITS.EMAIL_SUBJECT} characters
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
                   <textarea
                     value={composeBody}
-                    onChange={(e) => setComposeBody(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= VALIDATION_LIMITS.EMAIL_BODY) {
+                        setComposeBody(value);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     rows={10}
                     placeholder="Your message..."
+                    maxLength={VALIDATION_LIMITS.EMAIL_BODY}
                   />
+                  <div className="text-xs text-gray-400 mt-1 text-right">
+                    {composeBody.length}/{VALIDATION_LIMITS.EMAIL_BODY} characters
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -741,8 +760,14 @@ export default function GmailPanel() {
                   <Input
                     type="text"
                     value={meetingTitle}
-                    onChange={(e) => setMeetingTitle(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= VALIDATION_LIMITS.SUBJECT) {
+                        setMeetingTitle(value);
+                      }
+                    }}
                     placeholder="e.g. Customer onboarding call"
+                    maxLength={VALIDATION_LIMITS.SUBJECT}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -779,8 +804,11 @@ export default function GmailPanel() {
                           type="email"
                           value={attendeeInput}
                           onChange={(e) => {
-                            setAttendeeInput(e.target.value);
-                            setShowAttendeeSuggestions(e.target.value.length > 0 && filteredSuggestions.length > 0);
+                            const value = e.target.value;
+                            if (value.length <= VALIDATION_LIMITS.EMAIL) {
+                              setAttendeeInput(value);
+                              setShowAttendeeSuggestions(value.length > 0 && filteredSuggestions.length > 0);
+                            }
                           }}
                           onKeyPress={handleAttendeeKeyPress}
                           onFocus={() => {
@@ -791,6 +819,7 @@ export default function GmailPanel() {
                             setTimeout(() => setShowAttendeeSuggestions(false), 200);
                           }}
                           placeholder="Enter email address"
+                          maxLength={VALIDATION_LIMITS.EMAIL}
                         />
                         {showAttendeeSuggestions && filteredSuggestions.length > 0 && (
                           <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
@@ -827,11 +856,20 @@ export default function GmailPanel() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Agenda / notes (optional)</label>
                   <textarea
                     value={meetingNotes}
-                    onChange={(e) => setMeetingNotes(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= VALIDATION_LIMITS.NOTES) {
+                        setMeetingNotes(value);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     rows={4}
                     placeholder="Share context or agenda that will be added to the calendar event"
+                    maxLength={VALIDATION_LIMITS.NOTES}
                   />
+                  <div className="text-xs text-gray-400 mt-1 text-right">
+                    {meetingNotes.length}/{VALIDATION_LIMITS.NOTES} characters
+                  </div>
                 </div>
               </div>
             </CardContent>

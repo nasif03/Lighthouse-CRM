@@ -4,7 +4,7 @@ import { clsx } from 'clsx';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { useAuthStore } from '../store/authStore';
-import { apiPost } from '../utils/api';
+import { apiPost, apiGet } from '../utils/api';
 
 type SupportChatMessage = {
   id: string;
@@ -15,21 +15,57 @@ type SupportChatMessage = {
 export default function SupportAI() {
   const { token } = useAuthStore();
 
-  const [messages, setMessages] = useState<SupportChatMessage[]>([
-    {
-      id: 'assistant-welcome',
-      role: 'assistant',
-      content:
-        "Hi! I'm Support AI. Ask anything about Jira/JS"
-        + 'M integration, CRM workflows, or Lighthouse MCP setup and I will guide you.',
-    },
-  ]);
+  const [messages, setMessages] = useState<SupportChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Load conversation history on mount
+  useEffect(() => {
+    if (!token) return;
+    
+    const loadHistory = async () => {
+      try {
+        const response = await apiGet<{ conversationId: string; messages: SupportChatMessage[] }>(
+          '/api/support-chat/history',
+          token
+        );
+        
+        if (response.messages && response.messages.length > 0) {
+          setMessages(response.messages);
+          setConversationId(response.conversationId);
+        } else {
+          // No history - show welcome message
+          setMessages([
+            {
+              id: 'assistant-welcome',
+              role: 'assistant',
+              content:
+                "Hi! I'm Support AI. Ask anything about Jira/JSM integration, CRM workflows, or Lighthouse MCP setup and I will guide you.",
+            },
+          ]);
+        }
+      } catch (err: any) {
+        // If history load fails, show welcome message
+        setMessages([
+          {
+            id: 'assistant-welcome',
+            role: 'assistant',
+            content:
+              "Hi! I'm Support AI. Ask anything about Jira/JSM integration, CRM workflows, or Lighthouse MCP setup and I will guide you.",
+          },
+        ]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+    
+    loadHistory();
+  }, [token]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,22 +90,19 @@ export default function SupportAI() {
     setError(null);
 
     try {
-      const historyPayload = nextMessages.slice(-8).map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-
+      // Backend loads history from DB, so we don't need to send it
       const response = await apiPost<{ reply: string; conversationId: string }>(
         '/api/support-chat',
         token,
         {
           message: messageText,
           conversationId,
-          history: historyPayload,
         },
       );
 
       setConversationId(response.conversationId);
+      
+      // Add assistant reply to messages
       setMessages((prev) => [
         ...prev,
         {
@@ -121,7 +154,10 @@ export default function SupportAI() {
             </div>
           )}
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
-            {messages.map((message) => (
+            {isLoadingHistory ? (
+              <div className="text-center text-gray-500 py-8 text-sm">Loading conversation...</div>
+            ) : (
+              messages.map((message) => (
               <div
                 key={message.id}
                 className={clsx('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
@@ -137,7 +173,8 @@ export default function SupportAI() {
                   {message.content}
                 </div>
               </div>
-            ))}
+              ))
+            )}
             <div ref={chatEndRef} />
           </div>
           {isSending && (
@@ -146,15 +183,26 @@ export default function SupportAI() {
             </div>
           )}
           <div className="mt-4 space-y-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={4}
-              placeholder="Type your question and press Enter to send"
-              className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:bg-gray-50"
-              disabled={isSending}
-            />
+            <div className="space-y-1">
+              <textarea
+                value={input}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 2000) {
+                    setInput(value);
+                  }
+                }}
+                onKeyDown={handleKeyDown}
+                rows={4}
+                placeholder="Type your question and press Enter to send"
+                className="w-full rounded-md border border-gray-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:bg-gray-50"
+                disabled={isSending}
+                maxLength={2000}
+              />
+              <div className="text-xs text-gray-400 text-right">
+                {input.length}/2000 characters
+              </div>
+            </div>
             <Button onClick={sendMessage} disabled={!canSend} className="w-full">
               {isSending ? 'Sending...' : 'Send'}
             </Button>

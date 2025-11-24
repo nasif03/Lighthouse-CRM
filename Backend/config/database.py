@@ -29,6 +29,7 @@ exports_collection = db.exports
 audit_collection = db.audit
 jira_integration_collection = db.jiraIntegration
 ticket_metadata_collection = db.ticketMetadata
+support_chat_messages_collection = db.supportChatMessages
 
 def test_connection():
     """Test MongoDB connection"""
@@ -206,6 +207,12 @@ def create_indexes():
         safe_create_index(messages_collection, [("conversationId", 1), ("createdAt", -1)], name="messages_conversationId_createdAt_idx")
         safe_create_index(messages_collection, [("orgId", 1), ("conversationId", 1)], name="messages_orgId_conversationId_idx")
         safe_create_index(messages_collection, [("orgId", 1), ("senderId", 1)], name="messages_orgId_senderId_idx")
+        
+        # Support Chat Messages collection indexes
+        safe_create_index(support_chat_messages_collection, "conversationId", name="support_chat_conversationId_idx")
+        safe_create_index(support_chat_messages_collection, [("conversationId", 1), ("createdAt", 1)], name="support_chat_conversationId_createdAt_idx")
+        safe_create_index(support_chat_messages_collection, [("orgId", 1), ("userId", 1)], name="support_chat_orgId_userId_idx")
+        safe_create_index(support_chat_messages_collection, [("orgId", 1), ("conversationId", 1)], name="support_chat_orgId_conversationId_idx")
         
         # Activities collection indexes
         safe_create_index(activities_collection, "orgId", name="activities_orgId_idx")

@@ -4,6 +4,7 @@ import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Textarea from '../components/ui/Textarea';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Select from '../components/ui/Select';
 import FileUpload from '../components/ui/FileUpload';
 import { useAuthStore } from '../store/authStore';
@@ -145,10 +146,19 @@ export default function CreateTicket() {
               <Input
                 id="subject"
                 value={formData.subject}
-                onChange={(e) => handleChange('subject', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= VALIDATION_LIMITS.TICKET_SUBJECT) {
+                    handleChange('subject', value);
+                  }
+                }}
                 placeholder="Brief summary of your issue"
                 required
+                maxLength={VALIDATION_LIMITS.TICKET_SUBJECT}
               />
+              <div className="text-xs text-gray-400 mt-1 text-right">
+                {formData.subject.length}/{VALIDATION_LIMITS.TICKET_SUBJECT} characters
+              </div>
             </div>
 
             {/* Description */}
@@ -159,11 +169,20 @@ export default function CreateTicket() {
               <Textarea
                 id="description"
                 value={formData.description}
-                onChange={(e) => handleChange('description', e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= VALIDATION_LIMITS.TICKET_DESCRIPTION) {
+                    handleChange('description', value);
+                  }
+                }}
                 placeholder="Please provide detailed information about your issue..."
                 rows={6}
                 required
+                maxLength={VALIDATION_LIMITS.TICKET_DESCRIPTION}
               />
+              <div className="text-xs text-gray-400 mt-1 text-right">
+                {formData.description.length}/{VALIDATION_LIMITS.TICKET_DESCRIPTION} characters
+              </div>
             </div>
 
             {/* Category and Priority Row */}

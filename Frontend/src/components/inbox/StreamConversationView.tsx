@@ -4,6 +4,7 @@ import { useInboxStore } from '../../store/inboxStore';
 import { useAuthStore } from '../../store/authStore';
 import { Channel, MessageInput, Window, useChannelStateContext, useChannelActionContext } from 'stream-chat-react';
 import Input from '../ui/Input';
+import { VALIDATION_LIMITS } from '../../utils/validation';
 import Button from '../ui/Button';
 import StreamAudioCallButton from './calls/StreamAudioCallButton';
 
@@ -76,7 +77,12 @@ function CustomMessageInput() {
         <Input
           placeholder="Type a message..."
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value.length <= VALIDATION_LIMITS.CHAT_MESSAGE) {
+              setInputValue(value);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -84,6 +90,7 @@ function CustomMessageInput() {
             }
           }}
           className="flex-1"
+          maxLength={VALIDATION_LIMITS.CHAT_MESSAGE}
         />
         <Button onClick={handleSend} disabled={!inputValue.trim()}>
           Send

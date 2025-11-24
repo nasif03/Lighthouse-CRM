@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Card, { CardContent, CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { VALIDATION_LIMITS } from '../utils/validation';
 import Select from '../components/ui/Select';
 import { Table, THead, TBody, TR, TH, TD } from '../components/ui/Table';
 import { clsx } from 'clsx';
@@ -299,8 +300,14 @@ export default function Support() {
                 <Input
                   placeholder="Search by ticket ID, subject, customer name, or email..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= VALIDATION_LIMITS.SEARCH_QUERY) {
+                      setSearchQuery(value);
+                    }
+                  }}
                   className="w-full"
+                  maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
                 />
               </div>
               <Select
