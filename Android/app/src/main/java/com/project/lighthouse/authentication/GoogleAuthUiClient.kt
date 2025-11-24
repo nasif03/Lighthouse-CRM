@@ -3,6 +3,7 @@ package com.project.lighthouse.authentication
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.util.Log
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.Firebase
@@ -19,16 +20,21 @@ class GoogleAuthUiClient(
     private val auth = Firebase.auth
 
     suspend fun signIn(): IntentSender? {
+        Log.d("GoogleAuthUiClient", "Starting One Tap sign-in flow")
         val result = try {
             oneTapClient.beginSignIn(
                 buildSignInRequest()
             ).await()
         } catch(e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuthUiClient", "One Tap sign-in failed: ${e.message}", e)
             if(e is CancellationException) throw e
             null
         }
-        return result?.pendingIntent?.intentSender
+        return result?.pendingIntent?.intentSender.also {
+            if (it == null) {
+                Log.w("GoogleAuthUiClient", "One Tap sign-in did not return an IntentSender")
+            }
+        }
     }
 
     suspend fun signInWithIntent(intent: Intent): SignInResult {
@@ -49,7 +55,7 @@ class GoogleAuthUiClient(
                 errorMessage = null
             )
         } catch(e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuthUiClient", "signInWithIntent failed: ${e.message}", e)
             if(e is CancellationException) throw e
             SignInResult(
                 data = null,
