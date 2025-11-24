@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useInboxStore, Conversation } from '../../store/inboxStore';
 import { useTenantStore } from '../../store/tenantStore';
+import { useAuthStore } from '../../store/authStore';
 import { clsx } from 'clsx';
+import NewConversationModal from './NewConversationModal';
 
 function formatTime(date: Date): string {
   const now = new Date();
@@ -20,17 +23,39 @@ function ConversationItem({ conversation }: { conversation: Conversation }) {
   const { activeConversationId, setActiveConversation } = useInboxStore();
   const isActive = activeConversationId === conversation.id;
 
+  const handleClick = () => {
+    console.log('Conversation clicked:', {
+      id: conversation.id,
+      cid: conversation.cid,
+      channelId: conversation.channelId,
+      channelType: conversation.channelType,
+      fullConversation: conversation
+    });
+    // Try using cid if id doesn't work
+    const conversationId = conversation.id || conversation.cid || conversation.channelId;
+    console.log('Setting active conversation to:', conversationId);
+    setActiveConversation(conversationId);
+  };
+
   return (
     <button
-      onClick={() => setActiveConversation(conversation.id)}
+      onClick={handleClick}
       className={clsx(
         'w-full px-3 py-2.5 rounded-md text-left transition-colors',
         isActive ? 'bg-brand-50 border-l-2 border-brand-600' : 'hover:bg-gray-50'
       )}
     >
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-sm flex-shrink-0">
-          {conversation.participantAvatar || conversation.participantName[0]}
+        <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold text-sm flex-shrink-0 overflow-hidden">
+          {conversation.participantAvatar ? (
+            <img 
+              src={conversation.participantAvatar} 
+              alt={conversation.participantName}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span>{conversation.participantName?.[0]?.toUpperCase() || '?'}</span>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -56,23 +81,53 @@ function ConversationItem({ conversation }: { conversation: Conversation }) {
 }
 
 export default function InboxSidebar() {
-  const { conversations } = useInboxStore();
+  const { conversations, fetchConversations, isLoading } = useInboxStore();
   const { activeTenantId } = useTenantStore();
+  const { token } = useAuthStore();
+  const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+
+  useEffect(() => {
+    if (token) {
+      fetchConversations(token);
+    }
+  }, [token, fetchConversations]);
 
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className="px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Inbox</h2>
-          <span className="text-xs text-gray-500">Tenant: {activeTenantId}</span>
+    <>
+      <div className="h-full w-full flex flex-col">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h2 className="text-lg font-semibold">Inbox</h2>
+            <span className="text-xs text-gray-500">Tenant: {activeTenantId}</span>
+          </div>
+          <button
+            onClick={() => setShowNewConversationModal(true)}
+            className="w-full px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Conversation
+          </button>
         </div>
-      </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {conversations.map((conv) => (
-          <ConversationItem key={conv.id} conversation={conv} />
-        ))}
+        {isLoading ? (
+          <div className="text-center text-gray-500 py-4 text-sm">Loading conversations...</div>
+        ) : conversations.length === 0 ? (
+          <div className="text-center text-gray-500 py-4 text-sm">No conversations yet</div>
+        ) : (
+          conversations.map((conv) => (
+            <ConversationItem key={conv.id} conversation={conv} />
+          ))
+        )}
       </div>
-    </div>
+      </div>
+      
+      <NewConversationModal
+        isOpen={showNewConversationModal}
+        onClose={() => setShowNewConversationModal(false)}
+      />
+    </>
   );
 }
 

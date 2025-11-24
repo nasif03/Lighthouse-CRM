@@ -9,12 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "firebase": "^10.7.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
-    "zustand": "^4.5.2",
-    "clsx": "^2.1.1",
-    "firebase": "^10.7.1"
+    "stream-chat": "^8.60.0",
+    "stream-chat-react": "^11.24.1",
+    "zustand": "^4.5.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.7",
@@ -27,5 +29,3 @@
     "vite": "^5.4.8"
   }
 }
-
-

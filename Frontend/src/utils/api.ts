@@ -154,6 +154,7 @@ export async function apiPost<T>(
     ...options,
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       ...options.headers,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },

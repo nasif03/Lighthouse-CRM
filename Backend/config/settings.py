@@ -32,3 +32,8 @@ JIRA_SERVER = os.getenv("JIRA_SERVER", "https://lighthouse-crm.atlassian.net")
 JIRA_EMAIL = os.getenv("JIRA_EMAIL", "niloy.ashraf@northsouth.edu")
 JIRA_TOKEN = os.getenv("JIRA_TOKEN")
 
+# Stream Chat Configuration
+STREAM_CHAT_API_KEY = os.getenv("STREAM_CHAT_API_KEY", "n8nh34grh4b3")
+STREAM_CHAT_API_SECRET = os.getenv("STREAM_CHAT_API_SECRET", "hydg2yrmqfktv4d4xauv7s9g5mebtsmn2a9nt3byw85vaxdu5sdkdyzx3kydmnsq")
+STREAM_CHAT_APP_ID = os.getenv("STREAM_CHAT_APP_ID", "1451679")
+

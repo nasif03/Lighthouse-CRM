@@ -1,12 +1,14 @@
 """Lighthouse CRM Backend - Main Application Entry Point"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import uvicorn
 
 from config.settings import CORS_ORIGINS, PORT, HOST
 from config.database import initialize_database
 from services.firebase import initialize_firebase
-from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard, organizations, employees, roles, jira, gmail, twilio
+from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard, organizations, employees, roles, jira, gmail, twilio, chat
 from api.routes.fireflies_routes import router as fireflies_router
 from api.routes import calendar_routes
 
@@ -25,6 +27,16 @@ app.add_middleware(
 # Initialize services
 initialize_database()
 initialize_firebase()
+
+# Add validation error handler
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors and return detailed error messages"""
+    print(f"Validation error on {request.url.path}: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors(), "body": str(exc.body)},
+    )
 
 # Health check
 @app.get("/")
@@ -49,6 +61,7 @@ app.include_router(gmail.router)
 app.include_router(twilio.router)
 app.include_router(fireflies_router)
 app.include_router(calendar_routes.router)
+app.include_router(chat.router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host=HOST, port=PORT)
