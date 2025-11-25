@@ -8,8 +8,14 @@ import com.project.lighthouse.data.repository.AuthRepository
 import com.project.lighthouse.data.repository.ContactsRepository
 import com.project.lighthouse.data.repository.DashboardRepository
 import com.project.lighthouse.data.repository.DealsRepository
+import com.project.lighthouse.data.repository.ChatRepository
+import com.project.lighthouse.data.repository.GmailRepository
+import com.project.lighthouse.data.repository.SupportChatRepository
+import com.project.lighthouse.data.repository.JiraRepository
 import com.project.lighthouse.data.repository.LeadsRepository
+import com.project.lighthouse.data.repository.MeetingsRepository
 import com.project.lighthouse.data.repository.OrganizationRepository
+import com.project.lighthouse.data.repository.TicketsRepository
 import com.project.lighthouse.ui.auth.AuthViewModel
 
 object AppModule {
@@ -21,6 +27,12 @@ object AppModule {
     private var dealsRepository: DealsRepository? = null
     private var accountsRepository: AccountsRepository? = null
     private var organizationRepository: OrganizationRepository? = null
+    private var gmailRepository: GmailRepository? = null
+    private var meetingsRepository: MeetingsRepository? = null
+    private var jiraRepository: JiraRepository? = null
+    private var ticketsRepository: TicketsRepository? = null
+    private var chatRepository: ChatRepository? = null
+    private var supportChatRepository: SupportChatRepository? = null
 
     fun initialize(context: Context) {
         // Initialize TokenManager
@@ -37,6 +49,12 @@ object AppModule {
         dealsRepository = DealsRepository()
         accountsRepository = AccountsRepository()
         organizationRepository = OrganizationRepository()
+        gmailRepository = GmailRepository()
+        meetingsRepository = MeetingsRepository()
+        jiraRepository = JiraRepository()
+        ticketsRepository = TicketsRepository()
+        chatRepository = ChatRepository()
+        supportChatRepository = SupportChatRepository()
     }
 
     fun getTokenManager(context: Context): TokenManager {
@@ -93,6 +111,48 @@ object AppModule {
             initialize(context)
         }
         return organizationRepository!!
+    }
+
+    fun getGmailRepository(context: Context): GmailRepository {
+        if (gmailRepository == null) {
+            initialize(context)
+        }
+        return gmailRepository!!
+    }
+
+    fun getMeetingsRepository(context: Context): MeetingsRepository {
+        if (meetingsRepository == null) {
+            initialize(context)
+        }
+        return meetingsRepository!!
+    }
+
+    fun getJiraRepository(context: Context): JiraRepository {
+        if (jiraRepository == null) {
+            initialize(context)
+        }
+        return jiraRepository!!
+    }
+
+    fun getTicketsRepository(context: Context): TicketsRepository {
+        if (ticketsRepository == null) {
+            initialize(context)
+        }
+        return ticketsRepository!!
+    }
+
+    fun getChatRepository(context: Context): ChatRepository {
+        if (chatRepository == null) {
+            initialize(context)
+        }
+        return chatRepository!!
+    }
+
+    fun getSupportChatRepository(context: Context): SupportChatRepository {
+        if (supportChatRepository == null) {
+            initialize(context)
+        }
+        return supportChatRepository!!
     }
 
     fun getAuthViewModel(context: Context): AuthViewModel {

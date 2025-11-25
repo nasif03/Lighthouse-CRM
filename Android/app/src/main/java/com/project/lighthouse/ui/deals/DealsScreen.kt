@@ -2,16 +2,18 @@ package com.project.lighthouse.ui.deals
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,19 +31,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.project.lighthouse.R
 import com.project.lighthouse.data.model.DealDto
+import com.project.lighthouse.ui.common.StatusChip
+import com.project.lighthouse.ui.common.WebStyleCard
+import com.project.lighthouse.ui.theme.Brand600
+import com.project.lighthouse.ui.theme.Gray400
+import com.project.lighthouse.ui.theme.Gray500
+import com.project.lighthouse.ui.theme.Gray700
+import com.project.lighthouse.ui.theme.Gray900
+import java.text.NumberFormat
+import java.util.Locale
 
 private val dealStages = listOf(
     "prospecting",
@@ -82,7 +95,7 @@ fun DealsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Deals") },
+                title = { Text("Deals", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = onRefresh, enabled = !state.isRefreshing) {
                         Icon(
@@ -151,8 +164,8 @@ fun DealsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(state.deals, key = { it.id }) { deal ->
                     DealCard(
@@ -186,30 +199,71 @@ private fun DealCard(
     onDelete: () -> Unit
 ) {
     var stageMenuExpanded by remember { mutableStateOf(false) }
+    
+    val formattedAmount = deal.amount?.let {
+        NumberFormat.getCurrencyInstance(Locale.US).apply {
+            maximumFractionDigits = 0
+            minimumFractionDigits = 0
+        }.format(it)
+    } ?: "N/A"
 
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(deal.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            deal.amount?.let {
-                Text(
-                    text = "${deal.currency} ${"%,.0f".format(it)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            Text("Stage: ${deal.stageId.uppercase()}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.padding(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { stageMenuExpanded = true }, enabled = !isBusy) {
-                    Text("Change Stage")
+            // Name
+            Text(
+                text = deal.name,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = Gray900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Amount
+            Text(
+                text = formattedAmount,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                fontWeight = FontWeight.Bold,
+                color = Gray700
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Stage Chip
+            StatusChip(status = deal.stageId)
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { stageMenuExpanded = true },
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand600)
+                ) {
+                    Text("Change Stage", fontSize = 13.sp)
                 }
-                TextButton(onClick = onDelete, enabled = !isBusy) {
-                    Text("Delete")
+                Button(
+                    onClick = onDelete,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+                ) {
+                    Text("Delete", fontSize = 13.sp, color = Color.Red)
                 }
             }
+            
+            // Stage Dropdown
             DropdownMenu(expanded = stageMenuExpanded, onDismissRequest = { stageMenuExpanded = false }) {
                 dealStages.forEach { stage ->
                     DropdownMenuItem(
-                        text = { Text(stage) },
+                        text = { Text(stage.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }) },
                         onClick = {
                             stageMenuExpanded = false
                             onUpdateStage(stage)
@@ -230,20 +284,22 @@ private fun CreateDealDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Deal") },
+        title = { Text("New Deal", style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = state.name,
                     onValueChange = { onFieldChange(it, null, null) },
                     label = { Text("Name") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.amount,
                     onValueChange = { onFieldChange(null, it, null) },
                     label = { Text("Amount") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 DealStageDropdown(
                     selectedStage = state.stageId,
@@ -271,13 +327,17 @@ private fun DealStageDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
-        TextButton(onClick = { expanded = true }) {
-            Text("Stage: $selectedStage")
+        Button(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+        ) {
+            Text("Stage: ${selectedStage.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             dealStages.forEach { stage ->
                 DropdownMenuItem(
-                    text = { Text(stage) },
+                    text = { Text(stage.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }) },
                     onClick = {
                         expanded = false
                         onStageSelected(stage)
@@ -287,4 +347,3 @@ private fun DealStageDropdown(
         }
     }
 }
-

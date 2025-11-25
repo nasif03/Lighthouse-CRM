@@ -2,16 +2,18 @@ package com.project.lighthouse.ui.accounts
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -24,7 +26,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,9 +36,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.project.lighthouse.R
 import com.project.lighthouse.data.model.AccountDto
+import com.project.lighthouse.ui.common.StatusChip
+import com.project.lighthouse.ui.common.WebStyleCard
+import com.project.lighthouse.ui.theme.Gray400
+import com.project.lighthouse.ui.theme.Gray500
+import com.project.lighthouse.ui.theme.Gray900
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +76,7 @@ fun AccountsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Accounts") },
+                title = { Text("Accounts", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = onRefresh, enabled = !state.isRefreshing) {
                         Icon(
@@ -137,8 +145,8 @@ fun AccountsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(state.accounts, key = { it.id }) { account ->
                     AccountCard(
@@ -169,33 +177,80 @@ private fun AccountCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(account.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            // Name
+            Text(
+                text = account.name,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = Gray900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Domain
             account.domain?.takeIf { it.isNotBlank() }?.let {
-                Text("Domain: $it", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = Gray500,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+            
+            // Industry
             account.industry?.takeIf { it.isNotBlank() }?.let {
-                Text("Industry: $it", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Gray400
+                )
             }
+            
+            // Phone
             account.phone?.takeIf { it.isNotBlank() }?.let {
-                Text("Phone: $it", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = Gray500,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text("Status: ${account.status}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.padding(4.dp))
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Status Chip
+            StatusChip(status = account.status)
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Action Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = onEdit, enabled = !isBusy) {
-                    Text("Edit")
+                Button(
+                    onClick = onEdit,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+                ) {
+                    Text("Edit", fontSize = 13.sp)
                 }
-                TextButton(
+                Button(
                     onClick = onDelete,
                     enabled = !isBusy,
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
-                    Text("Delete")
+                    Text("Delete", fontSize = 13.sp, color = Color.Red)
                 }
             }
         }
@@ -211,38 +266,48 @@ private fun AccountDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (state.editingAccountId == null) "New Account" else "Edit Account") },
+        title = { 
+            Text(
+                text = if (state.editingAccountId == null) "New Account" else "Edit Account",
+                style = MaterialTheme.typography.titleLarge
+            ) 
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = state.name,
                     onValueChange = { onFieldChange(it, null, null, null, null) },
                     label = { Text("Name") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.domain,
                     onValueChange = { onFieldChange(null, it, null, null, null) },
                     label = { Text("Domain") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.industry,
                     onValueChange = { onFieldChange(null, null, it, null, null) },
                     label = { Text("Industry") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.phone,
                     onValueChange = { onFieldChange(null, null, null, it, null) },
                     label = { Text("Phone") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.status,
                     onValueChange = { onFieldChange(null, null, null, null, it) },
                     label = { Text("Status") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
@@ -258,4 +323,3 @@ private fun AccountDialog(
         }
     )
 }
-

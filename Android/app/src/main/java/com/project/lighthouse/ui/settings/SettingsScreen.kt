@@ -2,18 +2,20 @@ package com.project.lighthouse.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,17 +28,25 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.project.lighthouse.R
 import com.project.lighthouse.data.model.OrganizationResponse
 import com.project.lighthouse.data.model.TenantResponse
+import com.project.lighthouse.ui.common.WebStyleCard
+import com.project.lighthouse.ui.theme.Brand600
+import com.project.lighthouse.ui.theme.Gray200
+import com.project.lighthouse.ui.theme.Gray400
+import com.project.lighthouse.ui.theme.Gray500
+import com.project.lighthouse.ui.theme.Gray900
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +81,7 @@ fun SettingsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = onRefresh) {
                         Icon(painter = painterResource(id = R.drawable.ic_refresh), contentDescription = "Refresh")
@@ -84,74 +94,136 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Profile Card
             item {
-                Card {
+                WebStyleCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(userName, style = MaterialTheme.typography.bodyLarge)
-                        Text(userEmail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.padding(4.dp))
-                        Button(onClick = onLogout) {
-                            Text("Sign Out")
+                        Text(
+                            text = "Profile",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Gray900
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = userName,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                            color = Gray900
+                        )
+                        Text(
+                            text = userEmail,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                            color = Gray500
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onLogout,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                        ) {
+                            Text("Sign Out", fontSize = 14.sp)
                         }
                     }
                 }
             }
+            
+            // Create Organization Card
             item {
-                Card {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Create Organization", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                WebStyleCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Create Organization",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Gray900
+                        )
                         OutlinedTextField(
                             value = state.createOrgName,
                             onValueChange = { onUpdateCreateForm(it, null) },
-                            label = { Text("Name") }
+                            label = { Text("Name") },
+                            modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = state.createOrgDomain,
                             onValueChange = { onUpdateCreateForm(null, it) },
-                            label = { Text("Domain (optional)") }
+                            label = { Text("Domain (optional)") },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Button(onClick = onCreateOrg, enabled = state.createOrgName.isNotBlank()) {
-                            Text("Create")
+                        Button(
+                            onClick = onCreateOrg,
+                            enabled = state.createOrgName.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Brand600),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Create", fontSize = 14.sp)
                         }
                     }
                 }
             }
+            
+            // Join Organization Card
             item {
-                Card {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Join Organization", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                WebStyleCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Join Organization",
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Gray900
+                        )
                         OutlinedTextField(
                             value = state.joinOrgEmail,
                             onValueChange = { onUpdateJoinForm(it, null) },
-                            label = { Text("Your Email") }
+                            label = { Text("Your Email") },
+                            modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = state.joinOrgName,
                             onValueChange = { onUpdateJoinForm(null, it) },
-                            label = { Text("Organization Name") }
+                            label = { Text("Organization Name") },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Button(onClick = onJoinOrg, enabled = state.joinOrgEmail.isNotBlank() && state.joinOrgName.isNotBlank()) {
-                            Text("Request Access")
+                        Button(
+                            onClick = onJoinOrg,
+                            enabled = state.joinOrgEmail.isNotBlank() && state.joinOrgName.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Brand600),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Request Access", fontSize = 14.sp)
                         }
                     }
                 }
             }
+            
+            // Organizations List
             if (state.organizations.isNotEmpty()) {
                 item {
-                    Text("Your Organizations", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Your Organizations",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = Gray900,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
                 items(state.organizations, key = { it.id }) { org ->
                     OrganizationItem(org)
                 }
             }
+            
+            // Tenants List
             state.tenants?.let { tenantList ->
                 item {
-                    Text("Active Tenant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Active Tenant",
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = Gray900,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
                 items(tenantList.tenants, key = { it.id }) { tenant ->
                     TenantItem(
@@ -168,11 +240,25 @@ fun SettingsScreen(
 
 @Composable
 private fun OrganizationItem(org: OrganizationResponse) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(org.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = org.name,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = Gray900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             org.domain?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = Gray500,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -185,7 +271,7 @@ private fun TenantItem(
     isSwitching: Boolean,
     onSwitch: () -> Unit
 ) {
-    Card {
+    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -193,18 +279,41 @@ private fun TenantItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(tenant.name, style = MaterialTheme.typography.titleMedium)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = tenant.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = Gray900,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (isActive) {
-                    Text("Active", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Active",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Brand600,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
             if (!isActive) {
-                TextButton(onClick = onSwitch, enabled = !isSwitching) {
-                    Text("Switch")
+                Button(
+                    onClick = onSwitch,
+                    enabled = !isSwitching,
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand600)
+                ) {
+                    if (isSwitching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(4.dp),
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Switch", fontSize = 13.sp)
+                    }
                 }
             }
         }
     }
 }
-

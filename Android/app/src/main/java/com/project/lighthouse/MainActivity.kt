@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -39,9 +40,6 @@ import com.project.lighthouse.authentication.GoogleAuthUiClient
 import com.project.lighthouse.authentication.SignInScreen
 import com.project.lighthouse.authentication.SignInViewModel
 import com.project.lighthouse.di.AppModule
-import com.project.lighthouse.ui.accounts.AccountsScreen
-import com.project.lighthouse.ui.accounts.AccountsViewModel
-import com.project.lighthouse.ui.accounts.AccountsViewModelFactory
 import com.project.lighthouse.ui.auth.AuthViewModel
 import com.project.lighthouse.ui.auth.AuthViewModelFactory
 import com.project.lighthouse.ui.common.PlaceholderScreen
@@ -58,9 +56,19 @@ import com.project.lighthouse.ui.leads.LeadsScreen
 import com.project.lighthouse.ui.leads.LeadsViewModel
 import com.project.lighthouse.ui.leads.LeadsViewModelFactory
 import com.project.lighthouse.ui.navigation.MainDestination
+import com.project.lighthouse.ui.navigation.CollapsibleBottomBar
 import com.project.lighthouse.ui.settings.SettingsScreen
 import com.project.lighthouse.ui.settings.SettingsViewModel
 import com.project.lighthouse.ui.settings.SettingsViewModelFactory
+import com.project.lighthouse.ui.gmail.GmailScreen
+import com.project.lighthouse.ui.gmail.GmailViewModel
+import com.project.lighthouse.ui.gmail.GmailViewModelFactory
+import com.project.lighthouse.ui.meetings.MeetingsScreen
+import com.project.lighthouse.ui.meetings.MeetingsViewModel
+import com.project.lighthouse.ui.meetings.MeetingsViewModelFactory
+import com.project.lighthouse.ui.chat.ChatScreen
+import com.project.lighthouse.ui.chat.ChatViewModel
+import com.project.lighthouse.ui.chat.ChatViewModelFactory
 import com.project.lighthouse.ui.theme.LighthouseTheme
 import kotlinx.coroutines.launch
 
@@ -110,9 +118,10 @@ class MainActivity : ComponentActivity() {
                         bottomBar = {
                             val showBottomNav = shouldShowBottomBar(currentDestination)
                             if (showBottomNav) {
-                                LighthouseBottomBar(
+                                CollapsibleBottomBar(
                                     currentDestination = currentDestination,
                                     onNavigate = { destination ->
+                                        Log.d(TAG, "Navigating to ${destination.route}")
                                         navController.navigate(destination.route) {
                                             popUpTo(MainDestination.Dashboard.route) {
                                                 saveState = true
@@ -283,25 +292,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            composable(MainDestination.Accounts.route) {
-                                val accountsViewModel = viewModel<AccountsViewModel>(
-                                    factory = AccountsViewModelFactory(AppModule.getAccountsRepository(applicationContext))
-                                )
-                                val accountsState by accountsViewModel.state.collectAsStateWithLifecycle()
-
-                                AccountsScreen(
-                                    state = accountsState,
-                                    onRefresh = { accountsViewModel.refreshAccounts() },
-                                    onSubmitForm = { accountsViewModel.submitForm() },
-                                    onUpdateForm = { name, domain, industry, phone, status ->
-                                        accountsViewModel.updateForm(name, domain, industry, phone, status)
-                                    },
-                                    onToggleDialog = { show, id -> accountsViewModel.toggleDialog(show, id) },
-                                    onDeleteAccount = { accountsViewModel.deleteAccount(it) },
-                                    onDismissMessage = { accountsViewModel.dismissMessage() }
-                                )
-                            }
-
                             composable(MainDestination.Settings.route) {
                                 val settingsViewModel = viewModel<SettingsViewModel>(
                                     factory = SettingsViewModelFactory(AppModule.getOrganizationRepository(applicationContext))
@@ -329,6 +319,67 @@ class MainActivity : ComponentActivity() {
                                     onDismissMessage = { settingsViewModel.dismissMessage() }
                                 )
                             }
+
+                            composable(MainDestination.Gmail.route) {
+                                val gmailViewModel = viewModel<GmailViewModel>(
+                                    factory = GmailViewModelFactory(AppModule.getGmailRepository(applicationContext))
+                                )
+                                val gmailState by gmailViewModel.state.collectAsStateWithLifecycle()
+
+                                GmailScreen(
+                                    state = gmailState,
+                                    onRefresh = { gmailViewModel.refreshMessages() },
+                                    onAuthenticate = { code, token, refreshToken -> 
+                                        gmailViewModel.authenticate(code, token, refreshToken) 
+                                    },
+                                    onToggleSendEmailDialog = { gmailViewModel.toggleSendEmailDialog(it) },
+                                    onUpdateSendEmailForm = { to, subject, body -> 
+                                        gmailViewModel.updateSendEmailForm(to, subject, body) 
+                                    },
+                                    onSendEmail = { gmailViewModel.sendEmail() },
+                                    onDismissMessage = { gmailViewModel.dismissMessage() }
+                                )
+                            }
+
+                            composable(MainDestination.Meetings.route) {
+                                val meetingsViewModel = viewModel<MeetingsViewModel>(
+                                    factory = MeetingsViewModelFactory(AppModule.getMeetingsRepository(applicationContext))
+                                )
+                                val meetingsState by meetingsViewModel.state.collectAsStateWithLifecycle()
+
+                                MeetingsScreen(
+                                    state = meetingsState,
+                                    onRefresh = { meetingsViewModel.refreshTranscripts() },
+                                    onToggleCreateMeetingDialog = { meetingsViewModel.toggleCreateMeetingDialog(it) },
+                                    onUpdateCreateMeetingForm = { title, startTime, endTime, description, attendees, timezone ->
+                                        meetingsViewModel.updateCreateMeetingForm(title, startTime, endTime, description, attendees, timezone)
+                                    },
+                                    onAddAttendee = { meetingsViewModel.addAttendee(it) },
+                                    onRemoveAttendee = { meetingsViewModel.removeAttendee(it) },
+                                    onCreateMeeting = { meetingsViewModel.createMeeting() },
+                                    onDismissMessage = { meetingsViewModel.dismissMessage() }
+                                )
+                            }
+
+                            composable(MainDestination.Chat.route) {
+                                val chatViewModel = viewModel<ChatViewModel>(
+                                    factory = ChatViewModelFactory(AppModule.getChatRepository(applicationContext))
+                                )
+                                val chatState by chatViewModel.state.collectAsStateWithLifecycle()
+
+                                ChatScreen(
+                                    state = chatState,
+                                    onRefreshChannels = { chatViewModel.refreshChannels() },
+                                    onSelectChannel = { chatViewModel.selectChannel(it) },
+                                    onToggleUserSelection = { show -> chatViewModel.toggleUserSelection(show) },
+                                    onCreateChannelWithUser = { chatViewModel.createChannelWithUser(it) },
+                                    onUpdateMessageInput = { chatViewModel.updateMessageInput(it) },
+                                    onSendMessage = { chatViewModel.sendMessage() },
+                                    onGoBackToChannelList = { chatViewModel.goBackToChannelList() },
+                                    onDismissMessage = { chatViewModel.dismissMessage() }
+                                )
+                            }
+
                         }
                     }
                 }
@@ -364,7 +415,14 @@ private fun LighthouseBottomBar(
                         contentDescription = stringResource(id = destination.labelRes)
                     )
                 },
-                label = { Text(text = stringResource(id = destination.labelRes)) }
+                label = { 
+                    Text(
+                        text = stringResource(id = destination.labelRes),
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    ) 
+                },
+                alwaysShowLabel = true
             )
         }
     }

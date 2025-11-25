@@ -13,11 +13,13 @@ sealed class MainDestination(
     data object Leads : MainDestination("leads", R.string.nav_leads, R.drawable.ic_leads)
     data object Contacts : MainDestination("contacts", R.string.nav_contacts, R.drawable.ic_contacts)
     data object Deals : MainDestination("deals", R.string.nav_deals, R.drawable.ic_deals)
-    data object Accounts : MainDestination("accounts", R.string.nav_accounts, R.drawable.ic_accounts)
     data object Settings : MainDestination("settings", R.string.nav_settings, R.drawable.ic_settings)
+    data object Gmail : MainDestination("gmail", R.string.nav_gmail, R.drawable.ic_gmail)
+    data object Meetings : MainDestination("meetings", R.string.nav_meetings, R.drawable.ic_meetings)
+    data object Chat : MainDestination("chat", R.string.nav_chat, R.drawable.ic_chat)
 
     companion object {
-        val bottomNavItems = listOf(Dashboard, Leads, Contacts, Deals, Accounts, Settings)
+        val bottomNavItems = listOf(Dashboard, Leads, Contacts, Deals, Settings, Gmail, Meetings, Chat)
     }
 }
 

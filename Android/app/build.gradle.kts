@@ -10,6 +10,10 @@ android {
     namespace = "com.project.lighthouse"
     compileSdk = 36
 
+    val defaultApiBaseUrl = project.findProperty("API_BASE_URL") as? String
+        ?: System.getenv("API_BASE_URL")
+        ?: "http://10.0.2.2:3000/"
+
     defaultConfig {
         applicationId = "com.project.lighthouse"
         minSdk = 24
@@ -18,6 +22,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"${defaultApiBaseUrl.trimEnd('/')}/\""
+        )
     }
 
     buildTypes {
@@ -38,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

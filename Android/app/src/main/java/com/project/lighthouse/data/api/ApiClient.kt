@@ -31,16 +31,16 @@ object ApiClient {
         // Use synchronous method for interceptors
         val token = tokenManager?.getTokenSync()
         
-        val newRequest = if (token != null) {
-            originalRequest.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .header("Content-Type", "application/json")
-                .build()
-        } else {
-            originalRequest.newBuilder()
-                .header("Content-Type", "application/json")
-                .build()
+        val requestBuilder = originalRequest.newBuilder()
+            .header("Content-Type", "application/json")
+            // Add ngrok-skip-browser-warning header if using ngrok
+            .header("ngrok-skip-browser-warning", "true")
+        
+        if (token != null) {
+            requestBuilder.header("Authorization", "Bearer $token")
         }
+        
+        val newRequest = requestBuilder.build()
         
         chain.proceed(newRequest)
     }
@@ -48,9 +48,10 @@ object ApiClient {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val retrofit = Retrofit.Builder()
@@ -67,5 +68,11 @@ object ApiClient {
     val accountsApi: AccountsApiService = retrofit.create(AccountsApiService::class.java)
     val organizationsApi: OrganizationsApiService = retrofit.create(OrganizationsApiService::class.java)
     val tenantsApi: TenantsApiService = retrofit.create(TenantsApiService::class.java)
+    val gmailApi: GmailApiService = retrofit.create(GmailApiService::class.java)
+    val meetingsApi: MeetingsApiService = retrofit.create(MeetingsApiService::class.java)
+    val jiraApi: JiraApiService = retrofit.create(JiraApiService::class.java)
+    val ticketsApi: TicketsApiService = retrofit.create(TicketsApiService::class.java)
+    val chatApi: ChatApiService = retrofit.create(ChatApiService::class.java)
+    val supportChatApi: SupportChatApiService = retrofit.create(SupportChatApiService::class.java)
 }
 
