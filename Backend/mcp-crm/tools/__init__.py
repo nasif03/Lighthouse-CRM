@@ -27,7 +27,6 @@ tickets = _load_module("tickets", tools_dir / "tickets.py")
 dashboard = _load_module("dashboard", tools_dir / "dashboard.py")
 gmail = _load_module("gmail", tools_dir / "gmail.py")
 jira = _load_module("jira", tools_dir / "jira.py")
-twilio = _load_module("twilio", tools_dir / "twilio.py")
 
 
 def get_all_tools() -> List[Tool]:
@@ -388,33 +387,6 @@ def get_all_tools() -> List[Tool]:
         )
     ])
     
-    # Twilio integration tools
-    tools.extend([
-        Tool(
-            name="make_phone_call",
-            description="Make a phone call using Twilio VoIP. Only allowed number is +8801957128594.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "to": {"type": "string", "description": "Phone number to call (must be +8801957128594)"},
-                    "message": {"type": "string", "description": "Message to say during the call", "default": "Hello, this is a call from Lighthouse CRM."}
-                },
-                "required": ["to"]
-            }
-        ),
-        Tool(
-            name="get_call_status_info",
-            description="Get the status of a Twilio call.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "call_sid": {"type": "string", "description": "Twilio call SID"}
-                },
-                "required": ["call_sid"]
-            }
-        )
-    ])
-    
     return tools
 
 
@@ -460,8 +432,4 @@ TOOL_HANDLERS = {
     "create_jira_issue_from_ticket": jira.create_jira_issue_from_ticket,
     "get_jira_issues_for_project": jira.get_jira_issues_for_project,
     "sync_ticket_to_jira": jira.sync_ticket_to_jira,
-    
-    # Twilio
-    "make_phone_call": twilio.make_phone_call,
-    "get_call_status_info": twilio.get_call_status_info,
 }

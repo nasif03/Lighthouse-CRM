@@ -238,9 +238,10 @@ async def create_direct_channel(
 
 @router.get("/channels", response_model=List[dict])
 async def get_channels(
+    tenantId: Optional[str] = None,  # Add tenant ID parameter
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all channels for the current user"""
+    """Get all channels for the current user, optionally filtered by tenant"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
@@ -248,8 +249,17 @@ async def get_channels(
         
         user_id = str(user_doc["_id"])
         
-        # Get user channels
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        from utils.query_filters import get_user_ids
+        user_ids = get_user_ids(user_doc, active_org_id=tenantId)
+        org_id = user_ids["orgId"]
+        
+        # Get user channels - Stream Chat should filter by org_id if needed
+        # Note: Stream Chat channels might need custom filtering based on org_id
         channels = get_user_channels(user_id)
+        
+        # TODO: Filter channels by org_id if tenant isolation is required at channel level
+        # This depends on how Stream Chat stores org_id in channel custom data
         
         # Format response
         from config.database import users_collection

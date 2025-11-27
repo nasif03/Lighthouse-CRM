@@ -34,7 +34,7 @@ function ConversationItem({ conversation }: { conversation: Conversation }) {
     // Try using cid if id doesn't work
     const conversationId = conversation.id || conversation.cid || conversation.channelId;
     console.log('Setting active conversation to:', conversationId);
-    setActiveConversation(conversationId);
+    setActiveConversation(conversation.cid || null);
   };
 
   return (
@@ -82,9 +82,13 @@ function ConversationItem({ conversation }: { conversation: Conversation }) {
 
 export default function InboxSidebar() {
   const { conversations, fetchConversations, isLoading } = useInboxStore();
-  const { activeTenantId } = useTenantStore();
+  const { activeTenantId, tenants } = useTenantStore();  // Add tenants to destructuring
   const { token } = useAuthStore();
   const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+
+  // Get the active tenant name instead of showing the ID
+  const activeTenant = tenants.find(t => t.id === activeTenantId);
+  const activeTenantName = activeTenant?.name || 'Unknown Organization';  // Fallback
 
   useEffect(() => {
     if (token) {
@@ -98,7 +102,7 @@ export default function InboxSidebar() {
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center justify-between gap-2 mb-2">
             <h2 className="text-lg font-semibold">Inbox</h2>
-            <span className="text-xs text-gray-500">Tenant: {activeTenantId}</span>
+            <span className="text-xs text-gray-500">{activeTenantName}</span>  {/* Show name instead of ID */}
           </div>
           <button
             onClick={() => setShowNewConversationModal(true)}

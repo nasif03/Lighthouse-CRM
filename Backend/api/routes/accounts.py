@@ -8,6 +8,7 @@ from api.dependencies import get_current_user
 from config.database import accounts_collection, contacts_collection, deals_collection
 from services.activity_log import log_account_created
 from utils.performance import time_operation, time_database_query
+from utils.query_filters import get_user_ids  # Add this import
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -24,9 +25,9 @@ async def get_accounts(
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         # Optimize query: filter by orgId and deleted status, sort by createdAt
         # Query structure matches the compound index (orgId, deleted, createdAt)
@@ -90,10 +91,10 @@ async def create_account(request: CreateAccountRequest, current_user: dict = Dep
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
         owner_id = str(user_doc["_id"])
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        org_id = user_ids["orgId"]
         
         now = datetime.utcnow()
         
@@ -144,9 +145,9 @@ async def update_account(account_id: str, request: UpdateAccountRequest, current
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
         if not account:
@@ -195,9 +196,9 @@ async def get_account(account_id: str, current_user: dict = Depends(get_current_
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
         if not account:
@@ -261,9 +262,9 @@ async def delete_account(account_id: str, current_user: dict = Depends(get_curre
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         account = accounts_collection.find_one({"_id": ObjectId(account_id), "orgId": org_id})
         if not account:

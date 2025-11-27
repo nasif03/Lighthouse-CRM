@@ -9,7 +9,6 @@ The MCP server exposes Lighthouse CRM operations as AI-accessible tools, allowin
 - View dashboard statistics and analytics
 - Send emails via Gmail
 - Create Jira issues from tickets
-- Make phone calls via Twilio
 
 ## Installation
 
@@ -92,10 +91,6 @@ MCP server configuration is in `mcp/config.py`:
 - `create_jira_issue_from_ticket`: Create Jira issue from ticket
 - `get_jira_issues_for_project`: Get Jira issues
 - `sync_ticket_to_jira`: Sync ticket to Jira
-
-### Twilio Integration
-- `make_phone_call`: Make VoIP call
-- `get_call_status_info`: Get call status
 
 ## Authentication
 
@@ -188,10 +183,6 @@ print(result)
 ### Jira Errors
 - Ensure Jira project is created for organization
 - Verify Jira credentials in settings
-
-### Twilio Errors
-- Check Twilio credentials in `twil.txt`
-- Verify allowed number configuration
 
 ## Security Considerations
 

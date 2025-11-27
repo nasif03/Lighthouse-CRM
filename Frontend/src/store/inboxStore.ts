@@ -32,7 +32,7 @@ type InboxState = {
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Message) => void;
   markAsRead: (conversationId: string) => void;
-  fetchConversations: (token: string) => Promise<void>;
+  fetchConversations: (token: string, tenantId?: string) => Promise<void>;
   createDirectChannel: (token: string, otherUserId: string) => Promise<Conversation | null>;
 };
 
@@ -180,10 +180,16 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       ),
     })),
   
-  fetchConversations: async (token: string) => {
+  fetchConversations: async (token: string, tenantId?: string) => {
     set({ isLoading: true });
     try {
-      console.log('[fetchConversations] Fetching channels from API...');
+      console.log('[fetchConversations] Fetching channels from API...', tenantId ? `for tenant: ${tenantId}` : '');
+      
+      // Add tenant ID as query parameter if provided
+      const url = tenantId 
+        ? `/api/chat/channels?tenantId=${tenantId}`
+        : '/api/chat/channels';
+      
       const channels = await apiGet<Array<{
         id: string;
         type: string;
@@ -196,7 +202,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
           image?: string;
         };
         member_count: number;
-      }>>('/api/chat/channels', token);
+      }>>(url, token);
       
       console.log('[fetchConversations] Received channels:', channels.length, channels);
       

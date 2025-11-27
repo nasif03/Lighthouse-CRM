@@ -205,7 +205,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-gray-900">{stats?.summary.totalAccounts || 0}</div>
-            <div className="text-sm text-gray-500 mt-1">Active accounts</div>
+            <div className="text-sm text-gray-500 mt-1"> {stats?.summary.totalAccounts || 0} active accounts
+            </div>
+            <Link to="/accounts" className="text-sm text-brand-600 hover:underline mt-2 inline-block">
+              View all →
+            </Link>
           </CardContent>
         </Card>
       </div>

@@ -8,6 +8,7 @@ from api.dependencies import get_current_user
 from config.database import contacts_collection
 from services.activity_log import log_contact_created
 from utils.performance import time_operation, time_database_query
+from utils.query_filters import get_user_ids
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -24,9 +25,9 @@ async def get_contacts(
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         with time_database_query("contacts", "find"):
             cursor = contacts_collection.find(

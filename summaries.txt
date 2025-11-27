@@ -9,7 +9,7 @@ Lighthouse CRM is a multi-tenant Customer Relationship Management system built w
 - Frontend: React + TypeScript + Vite
 - Authentication: Firebase Google OAuth
 - Database: MongoDB (Atlas) with structured schema
-- Integrations: Gmail API, Twilio VoIP, Jira API
+- Integrations: Gmail API, Jira API
 
 ARCHITECTURE PRINCIPLES
 -----------------------
@@ -107,7 +107,6 @@ Dependencies:
 - google-auth-oauthlib==1.2.0: Google OAuth flow
 - google-auth-httplib2==0.2.0: Google OAuth HTTP client
 - google-api-python-client==2.108.0: Gmail API integration
-- twilio==8.10.0: Twilio VoIP integration
 - python-multipart==0.0.6: Form data support
 - pydantic==2.5.0: Data validation
 - httpx==0.25.2: HTTP client
@@ -1051,15 +1050,11 @@ Backend:
 6. Backend/services/gmail.py - NEW: Gmail OAuth and API integration
 7. Backend/api/routes/gmail.py - NEW: Gmail API routes (auth, messages, send)
 8. Backend/models/gmail.py - NEW: Gmail API models (requests/responses)
-9. Backend/services/twilio_service.py - NEW: Twilio VoIP service
-10. Backend/api/routes/twilio.py - NEW: Twilio API routes (call, status)
-11. Backend/models/twilio.py - NEW: Twilio API models
-12. Backend/requirements.txt - Added google-api-python-client, twilio
-13. Backend/main.py - Added Gmail and Twilio routers
+9. Backend/requirements.txt - Added google-api-python-client
+10. Backend/main.py - Added Gmail router
 14. Backend/client_secret.json - Updated with Gmail OAuth redirect URIs
 15. Backend/GMAIL_SETUP.md - NEW: Gmail API setup guide
-16. Backend/twil.txt - NEW: Twilio credentials file (gitignored)
-17. .gitignore - Added twil.txt, token/*, client_secret.json
+16. .gitignore - Added token/*, client_secret.json
 
 Frontend:
 ---------
@@ -1069,10 +1064,7 @@ Frontend:
 4. Frontend/src/utils/api.ts - Added apiPatch method, improved request cancellation
 5. Frontend/src/layouts/AppLayout.tsx - Improved navigation, added GmailPanel
 6. Frontend/src/store/gmailStore.ts - NEW: Gmail state management (Zustand)
-7. Frontend/src/store/twilioStore.ts - NEW: Twilio state management (Zustand)
-8. Frontend/src/components/gmail/GmailPanel.tsx - NEW: Gmail integration UI
-9. Frontend/src/components/inbox/ConversationView.tsx - Added Twilio call button
-10. Frontend/src/components/inbox/InboxSidebar.tsx - Added Twilio call button
+7. Frontend/src/components/gmail/GmailPanel.tsx - NEW: Gmail integration UI
 11. Frontend/src/store/authStore.ts - Removed automatic Gmail check on login
 
 ================================================================================
@@ -1165,105 +1157,15 @@ Configuration:
 - Token storage: Backend/token/{user_email}_token.json
 
 ================================================================================
-TWILIO VoIP INTEGRATION
-================================================================================
-
-Overview:
----------
-Twilio VoIP integration enables users to make phone calls directly from the
-Lighthouse CRM application. Currently implemented as one-way voice calls (automated
-messages). The integration is restricted to a single allowed phone number for security.
-
-Backend Implementation:
------------------------
-FILE: Backend/services/twilio_service.py
-- Credential loading from twil.txt file
-- Phone number normalization (handles various formats)
-- Number validation (only allows +8801957128594)
-- Call creation via Twilio API
-- Call status retrieval
-- TwiML generation for voice messages
-
-Key Functions:
-- load_twilio_credentials(): Loads credentials from twil.txt
-- get_twilio_client(): Returns Twilio client instance
-- normalize_phone_number(phone): Normalizes to E.164 format
-- is_allowed_number(phone): Validates phone number
-- make_call(to_number, message): Creates phone call
-- get_call_status(call_sid): Retrieves call status
-
-FILE: Backend/api/routes/twilio.py
-- POST /api/twilio/call: Make a phone call (one-way voice message)
-- GET /api/twilio/call/{call_sid}: Get call status
-- GET /api/twilio/allowed-number: Get allowed phone number
-
-FILE: Backend/models/twilio.py
-- MakeCallRequest: Call creation request
-- MakeCallResponse: Call creation response
-- CallStatusResponse: Call status response
-
-Frontend Implementation:
-------------------------
-FILE: Frontend/src/store/twilioStore.ts
-- Zustand store for Twilio state management
-- makeCall(): Initiates phone call
-- getCallStatus(): Gets call status
-- getAllowedNumber(): Gets allowed number
-- State: isLoading, error, callStatus
-
-FILE: Frontend/src/components/inbox/ConversationView.tsx
-- Call button in conversation header
-- Always calls +8801957128594 (hardcoded)
-- Loading state and call status display
-- Error handling
-
-FILE: Frontend/src/components/inbox/InboxSidebar.tsx
-- Call button in sidebar header
-- Calls the same allowed number
-- Loading state and call status display
-
-Security:
----------
-- Only allows calls to +8801957128594 (hardcoded)
-- Phone number validation before call creation
-- Credentials stored in twil.txt (gitignored)
-- All API routes require authentication
-
-Configuration:
---------------
-- twil.txt: Twilio credentials (account_sid, auth_token, twilio_number)
-- Allowed number: +8801957128594 (hardcoded)
-- Phone number formats supported: +8801957128594, 01957128594, 8801957128594
-
-Features:
----------
-- One-way voice calls (automated messages)
-- Call status tracking
-- Phone number normalization
-- Error handling and user feedback
-- Loading states during call initiation
-
-Future Enhancements:
---------------------
-- Two-way voice calls (browser-to-phone)
-- Twilio Voice SDK integration
-- Call recording
-- Call history
-- Multiple allowed numbers
-- Call routing and forwarding
-
-================================================================================
 UPDATED DEPENDENCIES
 ================================================================================
 
 Backend (requirements.txt):
 ---------------------------
 - google-api-python-client==2.108.0: Gmail API integration
-- twilio==8.10.0: Twilio VoIP integration
 
 Frontend (package.json):
 ------------------------
-- @twilio/voice-sdk: (Planned for two-way calls, currently not installed)
 
 ================================================================================
 RECENT CHANGES & IMPROVEMENTS (Latest Session)
@@ -1295,26 +1197,9 @@ DATE: Current Session
    - Message fetching after authentication
    - Compose email modal
 
-2. IMPLEMENTED: Twilio VoIP Integration
-   Files:
-   - Backend/services/twilio_service.py (NEW)
-   - Backend/api/routes/twilio.py (NEW)
-   - Backend/models/twilio.py (NEW)
-   - Frontend/src/store/twilioStore.ts (NEW)
-   - Frontend/src/components/inbox/ConversationView.tsx (UPDATED)
-   - Frontend/src/components/inbox/InboxSidebar.tsx (UPDATED)
-   
-   Features:
-   - One-way voice calls (automated messages)
-   - Call status tracking
-   - Phone number normalization
-   - Restricted to single allowed number (+8801957128594)
    - Call buttons in inbox components
    
    Security:
-   - Only allows calls to hardcoded number
-   - Phone number validation
-   - Credentials in gitignored file (twil.txt)
 
 3. IMPROVED: API Request Handling
    Files:
@@ -1342,7 +1227,6 @@ DATE: Current Session
    - .gitignore (UPDATED)
    
    Changes:
-   - Added twil.txt (Twilio credentials)
    - Added token/* (Gmail token files)
    - Added client_secret.json (Google OAuth credentials)
 
@@ -1368,7 +1252,6 @@ CURRENT FEATURES STATUS
 4. Contacts Management (CRUD, Card grid view)
 5. Deals Management (CRUD, Kanban view)
 6. Gmail Integration (View messages, send emails)
-7. Twilio VoIP Integration (One-way voice calls)
 8. Dashboard (Basic statistics)
 9. Inbox UI (Components with mock data)
 10. Activities/Activity Log
@@ -1389,15 +1272,7 @@ CURRENT FEATURES STATUS
    - ❌ Email threading (not implemented)
    - ❌ Email search (basic query support)
 
-2. Twilio VoIP Integration
-   - ✅ One-way calls working
-   - ✅ Call status tracking
-   - ❌ Two-way voice calls (not implemented)
-   - ❌ Browser-to-phone calls (not implemented)
-   - ❌ Call recording (not implemented)
-   - ❌ Call history (not implemented)
-
-3. Inbox Components
+2. Inbox Components
    - ✅ UI components exist
    - ✅ Mock data integration
    - ❌ Backend API integration (not implemented)
@@ -1424,7 +1299,6 @@ CURRENT FEATURES STATUS
 12. Exports
 13. Audit Log (comprehensive)
 14. Two-way Gmail sync
-15. Two-way Twilio calls
 16. Call recording
 17. Call history
 

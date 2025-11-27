@@ -19,6 +19,7 @@ import Login from './pages/Login';
 import SubmitTicket from './pages/SubmitTicket';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorPage from './components/ErrorPage';
+import Accounts from './pages/Accounts';
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
           { path: 'leads', element: <Leads /> },
           { path: 'contacts', element: <Contacts /> },
           { path: 'deals', element: <Deals /> },
+          { path: 'accounts', element: <Accounts /> },
           { path: 'campaigns', element: <Campaigns /> },
           { path: 'segments', element: <Segments /> },
           { path: 'templates', element: <Templates /> },
