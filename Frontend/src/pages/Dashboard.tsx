@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiGet } from '../utils/api';
 import { Link } from 'react-router-dom';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 type DashboardStats = {
   summary: {
@@ -52,19 +53,6 @@ const formatCurrency = (amount: number, currency: string = 'USD'): string => {
   }).format(amount);
 };
 
-// Helper function to format relative time
-const formatRelativeTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  
-  return date.toLocaleDateString();
-};
 
 // Helper function to get status color
 const getStatusColor = (status: string): string => {

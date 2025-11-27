@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { apiGet, apiPost, apiPatch, apiDelete, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New', color: 'bg-blue-50 border-blue-200' },
@@ -41,20 +42,6 @@ const getInitials = (name: string): string => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
   return name.substring(0, 2).toUpperCase();
-};
-
-// Helper function to format relative time
-const formatRelativeTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  
-  return date.toLocaleDateString();
 };
 
 // Helper function to parse CSV file

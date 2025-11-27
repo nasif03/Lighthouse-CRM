@@ -157,7 +157,7 @@ async def get_recent_items(current_user: dict = Depends(get_current_user)):
                     "email": lead.get("email", ""),
                     "status": lead.get("status", ""),
                     "source": lead.get("source", ""),
-                    "createdAt": lead.get("createdAt").isoformat() if lead.get("createdAt") else ""
+                    "createdAt": (lead.get("createdAt").isoformat() + 'Z') if lead.get("createdAt") else ""
                 }
                 for lead in recent_leads
             ],
@@ -169,7 +169,7 @@ async def get_recent_items(current_user: dict = Depends(get_current_user)):
                     "currency": deal.get("currency", "USD"),
                     "stageId": deal.get("stageId", ""),
                     "stageName": deal.get("stageName", ""),
-                    "createdAt": deal.get("createdAt").isoformat() if deal.get("createdAt") else ""
+                    "createdAt": (deal.get("createdAt").isoformat() + 'Z') if deal.get("createdAt") else ""
                 }
                 for deal in recent_deals
             ],
@@ -179,7 +179,7 @@ async def get_recent_items(current_user: dict = Depends(get_current_user)):
                     "name": f"{contact.get('firstName', '')} {contact.get('lastName', '')}".strip(),
                     "email": contact.get("email", ""),
                     "title": contact.get("title", ""),
-                    "createdAt": contact.get("createdAt").isoformat() if contact.get("createdAt") else ""
+                    "createdAt": (contact.get("createdAt").isoformat() + 'Z') if contact.get("createdAt") else ""
                 }
                 for contact in recent_contacts
             ]

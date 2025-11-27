@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 // import { TenantSwitcher } from '../components/TenantSwitcher';
 import { clsx } from 'clsx';
 import Button from '../components/ui/Button';
-import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies, IconAssistant, IconAccounts } from '../components/icons';
+import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies, IconAssistant, IconAccounts, IconCalendar } from '../components/icons';
 import InboxPanel from '../components/inbox/InboxPanel';
 import GmailPanel from '../components/gmail/GmailPanel';
 
@@ -22,6 +22,7 @@ const navSections = [
       { to: '/contacts', label: 'Contacts', icon: IconContacts },
       { to: '/accounts', label: 'Accounts', icon: IconAccounts },
       { to: '/deals', label: 'Deals', icon: IconDeals },
+      { to: '/calendar', label: 'Calendar', icon: IconCalendar },
     ]
   },
   // {

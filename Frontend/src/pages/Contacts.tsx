@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { apiGet, apiPost, apiPut, apiDelete, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
 import { Link, useNavigate } from 'react-router-dom';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 type Contact = {
   id: string;
@@ -34,19 +35,6 @@ const getInitials = (firstName: string, lastName?: string): string => {
   return firstName.substring(0, 2).toUpperCase();
 };
 
-// Helper function to format relative time
-const formatRelativeTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  
-  return date.toLocaleDateString();
-};
 
 export default function Contacts() {
   const navigate = useNavigate();

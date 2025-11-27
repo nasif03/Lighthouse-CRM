@@ -83,3 +83,29 @@ def create_calendar_event(
 
     return event
 
+
+def list_calendar_events(
+    *,
+    user_email: str,
+    time_min: Optional[str] = None,
+    time_max: Optional[str] = None,
+    max_results: int = 50,
+):
+    """List calendar events from the user's primary calendar."""
+    service = _get_calendar_service(user_email)
+
+    events_result = (
+        service.events()
+        .list(
+            calendarId="primary",
+            timeMin=time_min,
+            timeMax=time_max,
+            maxResults=max_results,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+
+    events = events_result.get("items", [])
+    return events

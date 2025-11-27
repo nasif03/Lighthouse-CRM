@@ -8,6 +8,7 @@ from api.dependencies import get_current_user
 from services.google_calendar import (
     CalendarAuthError,
     create_calendar_event,
+    list_calendar_events,
 )
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -68,3 +69,60 @@ def create_meeting(
         raise HTTPException(status_code=400, detail=f"Google Calendar error: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Failed to create meeting") from exc
+
+
+@router.get("/meetings")
+def get_meetings(
+    time_min: Optional[str] = None,
+    time_max: Optional[str] = None,
+    max_results: int = 50,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get upcoming meetings from Google Calendar"""
+    user_doc = current_user.get("user_doc")
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_email = user_doc.get("email")
+    if not user_email:
+        raise HTTPException(status_code=400, detail="User email missing")
+
+    try:
+        events = list_calendar_events(
+            user_email=user_email,
+            time_min=time_min,
+            time_max=time_max,
+            max_results=max_results,
+        )
+
+        # Format events for response
+        meetings = []
+        for event in events:
+            start = event.get("start", {}).get("dateTime") or event.get("start", {}).get("date")
+            end = event.get("end", {}).get("dateTime") or event.get("end", {}).get("date")
+            
+            # Extract Google Meet link
+            hangout_link = event.get("hangoutLink")
+            if not hangout_link:
+                conference_data = event.get("conferenceData", {})
+                entry_points = conference_data.get("entryPoints", [])
+                if entry_points:
+                    hangout_link = entry_points[0].get("uri")
+
+            meetings.append({
+                "event_id": event.get("id"),
+                "title": event.get("summary", "No Title"),
+                "description": event.get("description"),
+                "start_time": start,
+                "end_time": end,
+                "hangout_link": hangout_link,
+                "html_link": event.get("htmlLink"),
+                "attendees": [att.get("email") for att in event.get("attendees", [])],
+                "status": event.get("status", "confirmed"),
+            })
+
+        return {"meetings": meetings}
+    except CalendarAuthError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch meetings: {str(exc)}") from exc
