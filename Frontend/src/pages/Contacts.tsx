@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatRelativeTime } from '../utils/dateUtils';
+import AccessDenied from '../components/AccessDenied';
 
 type Contact = {
   id: string;
@@ -82,7 +83,11 @@ export default function Contacts() {
         return;
       }
       console.error('Error fetching contacts:', err);
-      setError(err.message || 'Failed to load contacts');
+      if (err.response?.status === 403 || err.message?.includes('403') || err.message?.includes('permission') || err.message?.includes('not have permission')) {
+        setError(err.message || 'You do not have permission to view contacts.');
+      } else {
+        setError(err.message || 'Failed to load contacts');
+      }
     } finally {
       setIsLoading(false);
       fetchingRef.current = false;
@@ -223,6 +228,15 @@ export default function Contacts() {
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-600">Loading contacts...</div>
       </div>
+    );
+  }
+
+  if (error && (error.includes('permission') || error.includes('403') || error.includes('not have permission'))) {
+    return (
+      <AccessDenied 
+        message={error}
+        helpText="Please contact your administrator to assign you a role with contact permissions (read:contacts or write:contacts)."
+      />
     );
   }
 

@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { apiGet, apiPost, apiPut, apiDelete, clearCache } from '../utils/api';
 import { useDebounce } from '../hooks/useDebounce';
 import { formatRelativeTime } from '../utils/dateUtils';
+import AccessDenied from '../components/AccessDenied';
 
 type Deal = {
   id: string;
@@ -101,7 +102,11 @@ export default function Deals() {
         return;
       }
       console.error('Error fetching deals:', err);
-      setError(err.message || 'Failed to load deals');
+      if (err.response?.status === 403 || err.message?.includes('403') || err.message?.includes('permission') || err.message?.includes('not have permission')) {
+        setError(err.message || 'You do not have permission to view deals.');
+      } else {
+        setError(err.message || 'Failed to load deals');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -334,6 +339,15 @@ export default function Deals() {
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-600">Loading deals...</div>
       </div>
+    );
+  }
+
+  if (error && (error.includes('permission') || error.includes('403') || error.includes('not have permission'))) {
+    return (
+      <AccessDenied 
+        message={error}
+        helpText="Please contact your administrator to assign you a role with deal permissions (read:deals or write:deals)."
+      />
     );
   }
 

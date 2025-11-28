@@ -9,6 +9,7 @@ from config.database import leads_collection, accounts_collection, contacts_coll
 from services.activity_log import log_lead_created, log_lead_converted
 from utils.performance import time_operation, time_database_query
 from utils.query_filters import build_user_filter, get_user_ids
+from utils.permissions import has_lead_permission
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -100,6 +101,16 @@ async def get_leads(
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Check if user has lead permissions
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
+        
+        if not has_lead_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to view leads. Contact your administrator to assign you a role with lead permissions (read:leads or write:leads)."
+            )
         
         # Build filter with both orgId and ownerId for data isolation
         query_filter = build_user_filter(user_doc, include_owner=True)

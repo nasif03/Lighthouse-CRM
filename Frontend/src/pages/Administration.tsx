@@ -5,6 +5,7 @@ import Input from '../components/ui/Input';
 import { useAuthStore } from '../store/authStore';
 import { useTenantStore } from '../store/tenantStore';
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api';
+import AccessDenied from '../components/AccessDenied';
 
 type Employee = {
   id: string;
@@ -32,6 +33,7 @@ export default function Administration() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<string | null>(null);
   
   // Employee management
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
@@ -77,8 +79,10 @@ export default function Administration() {
       const data = await apiGet<Employee[]>(`/api/organizations/${activeTenantId}/employees`, token);
       setEmployees(data);
     } catch (error: any) {
-      if (error.message?.includes('403')) {
-        alert('You do not have permission to view employees. Only organization admins can manage employees.');
+      if (error.response?.status === 403 || error.message?.includes('403') || error.message?.includes('admin') || error.message?.includes('permission')) {
+        setAccessDenied(error.message || "Only organization admins can view employees.");
+        setIsLoadingEmployees(false);
+        return;
       } else {
         console.error('Error loading employees:', error);
       }
@@ -93,8 +97,14 @@ export default function Administration() {
     try {
       const data = await apiGet<Role[]>(`/api/organizations/${activeTenantId}/roles`, token);
       setRoles(data);
-    } catch (error) {
-      console.error('Error loading roles:', error);
+    } catch (error: any) {
+      if (error.response?.status === 403 || error.message?.includes('403') || error.message?.includes('admin') || error.message?.includes('permission')) {
+        setAccessDenied(error.message || "Only organization admins can view roles.");
+        setIsLoadingRoles(false);
+        return;
+      } else {
+        console.error('Error loading roles:', error);
+      }
     } finally {
       setIsLoadingRoles(false);
     }
@@ -200,6 +210,15 @@ export default function Administration() {
           <p className="text-gray-600">Please select an organization to manage employees and roles.</p>
         </CardContent>
       </Card>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <AccessDenied 
+        message={accessDenied}
+        helpText="Please contact your organization administrator to grant you admin permissions."
+      />
     );
   }
 

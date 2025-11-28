@@ -8,6 +8,7 @@ from api.dependencies import get_current_user
 from config.database import deals_collection
 from services.activity_log import log_deal_created, log_deal_stage_changed
 from utils.performance import time_operation, time_database_query
+from utils.permissions import has_deal_permission
 
 router = APIRouter(prefix="/api/deals", tags=["deals"])
 
@@ -28,6 +29,13 @@ async def get_deals(
         from utils.query_filters import get_user_ids
         user_ids = get_user_ids(user_doc)
         org_id = user_ids["orgId"]
+        
+        # Check if user has deal permissions
+        if not has_deal_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to view deals. Contact your administrator to assign you a role with deal permissions (read:deals or write:deals)."
+            )
         
         with time_database_query("deals", "find"):
             cursor = deals_collection.find(

@@ -9,6 +9,7 @@ from config.database import contacts_collection
 from services.activity_log import log_contact_created
 from utils.performance import time_operation, time_database_query
 from utils.query_filters import get_user_ids
+from utils.permissions import has_contact_permission
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -28,6 +29,13 @@ async def get_contacts(
         # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
         user_ids = get_user_ids(user_doc)
         org_id = user_ids["orgId"]
+        
+        # Check if user has contact permissions
+        if not has_contact_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to view contacts. Contact your administrator to assign you a role with contact permissions (read:contacts or write:contacts)."
+            )
         
         with time_database_query("contacts", "find"):
             cursor = contacts_collection.find(

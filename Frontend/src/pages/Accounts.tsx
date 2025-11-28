@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import AccessDenied from '../components/AccessDenied';
 
 const API_BASE_URL = 'http://localhost:3000';
 
@@ -81,7 +82,11 @@ export default function Accounts() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch accounts');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.detail || errorData?.message || `HTTP ${response.status}`;
+        const error = new Error(errorMessage) as any;
+        error.response = { status: response.status, data: errorData };
+        throw error;
       }
 
       const data = await response.json();
@@ -95,7 +100,11 @@ export default function Accounts() {
       }
     } catch (err: any) {
       console.error('Error fetching accounts:', err);
-      setError(err.message || 'Failed to load accounts');
+      if (err.response?.status === 403 || err.message?.includes('403') || err.message?.includes('permission') || err.message?.includes('not have permission')) {
+        setError(err.message || 'You do not have permission to view accounts.');
+      } else {
+        setError(err.message || 'Failed to load accounts');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -380,6 +389,12 @@ export default function Accounts() {
           setIsModalOpen(true);
         }}>New Account</Button>
       </div>
+      {error && (error.includes('permission') || error.includes('403') || error.includes('not have permission')) ? (
+        <AccessDenied 
+          message={error}
+          helpText="Please contact your administrator to assign you a role with account permissions (read:accounts or write:accounts)."
+        />
+      ) : (
       <Card>
         <CardHeader>Accounts</CardHeader>
         <CardContent>
@@ -441,7 +456,7 @@ export default function Accounts() {
           )}
         </CardContent>
       </Card>
-
+      )}
       <Modal 
         open={isModalOpen} 
         onClose={handleClose} 

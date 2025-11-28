@@ -8,7 +8,8 @@ from api.dependencies import get_current_user
 from config.database import accounts_collection, contacts_collection, deals_collection
 from services.activity_log import log_account_created
 from utils.performance import time_operation, time_database_query
-from utils.query_filters import get_user_ids  # Add this import
+from utils.query_filters import get_user_ids
+from utils.permissions import has_account_permission
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -28,6 +29,13 @@ async def get_accounts(
         # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
         user_ids = get_user_ids(user_doc)
         org_id = user_ids["orgId"]
+        
+        # Check if user has account permissions
+        if not has_account_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to view accounts. Contact your administrator to assign you a role with account permissions (read:accounts or write:accounts)."
+            )
         
         # Optimize query: filter by orgId and deleted status, sort by createdAt
         # Query structure matches the compound index (orgId, deleted, createdAt)
