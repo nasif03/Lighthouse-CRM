@@ -6,6 +6,7 @@ from models.user import UserResponse, TokenResponse, VerifyTokenRequest
 from services.auth import verify_firebase_token
 from api.dependencies import get_current_user
 from config.database import users_collection, organizations_collection
+from utils.permissions import is_super_admin
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -60,7 +61,7 @@ async def verify_token(request: VerifyTokenRequest):
             users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
         
         # Return token and user info
-        # Get user doc to include orgId in response
+        # Get user doc to include orgId and isSuperAdmin in response
         final_user_doc = users_collection.find_one({"_id": ObjectId(user_id)})
         
         return TokenResponse(
@@ -70,7 +71,8 @@ async def verify_token(request: VerifyTokenRequest):
                 name=name,
                 email=email,
                 picture=picture,
-                orgId=final_user_doc.get("orgId") if final_user_doc else None
+                orgId=final_user_doc.get("orgId") if final_user_doc else None,
+                isSuperAdmin=is_super_admin(final_user_doc) if final_user_doc else False
             )
         )
     except Exception as e:
@@ -89,7 +91,8 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         name=user_doc.get("name", "User"),
         email=user_doc.get("email"),
         picture=user_doc.get("picture"),
-        orgId=user_doc.get("orgId")
+        orgId=user_doc.get("orgId"),
+        isSuperAdmin=is_super_admin(user_doc)
     )
 
 @router.post("/logout")

@@ -8,6 +8,7 @@ class UserResponse(BaseModel):
     email: str
     picture: Optional[str] = None
     orgId: Optional[Union[str, List[str]]] = None
+    isSuperAdmin: Optional[bool] = None
     
     class Config:
         from_attributes = True

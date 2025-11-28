@@ -1,6 +1,21 @@
 """Permission checking utilities"""
 from bson import ObjectId
 from config.database import organizations_collection, roles_collection
+from config.settings import SUPER_ADMIN_EMAIL
+
+
+def is_super_admin(user_doc: dict) -> bool:
+    """
+    Check if user is a super admin (CRM seller).
+    
+    Args:
+        user_doc: User document from database
+    
+    Returns:
+        True if user is super admin, False otherwise
+    """
+    email = user_doc.get("email", "").lower()
+    return email == SUPER_ADMIN_EMAIL.lower()
 
 
 def has_permission(user_doc: dict, org_id: str, required_permissions: list[str]) -> bool:
@@ -15,6 +30,10 @@ def has_permission(user_doc: dict, org_id: str, required_permissions: list[str])
     Returns:
         True if user has at least one of the required permissions, False otherwise
     """
+    # Super admin bypasses all permission checks
+    if is_super_admin(user_doc):
+        return True
+    
     user_id = str(user_doc["_id"])
     
     # Check if user is admin of the organization - admins have all permissions

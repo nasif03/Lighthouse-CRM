@@ -3,7 +3,7 @@ import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User a
 import { auth, googleProvider } from '../config/firebase';
 import { apiPost } from '../utils/api';
 
-type User = { id: string; name: string; email: string; picture?: string; orgId?: string } | null;
+type User = { id: string; name: string; email: string; picture?: string; orgId?: string; isSuperAdmin?: boolean } | null;
 
 type MeetingPayload = {
   title: string;

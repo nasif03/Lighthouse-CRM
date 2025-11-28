@@ -43,3 +43,6 @@ SUPPORT_AI_MODEL = os.getenv("SUPPORT_AI_MODEL", "gpt-4o-mini")
 SUPPORT_AI_BASE_URL = os.getenv("SUPPORT_AI_BASE_URL", "https://api.openai.com/v1")
 SUPPORT_AI_SYSTEM_PROMPT = os.getenv("SUPPORT_AI_SYSTEM_PROMPT")
 
+# Super Admin Configuration
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "admin@lighthouse.com")
+

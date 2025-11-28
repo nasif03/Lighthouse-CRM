@@ -6,6 +6,7 @@ from models.organization import OrganizationResponse, CreateOrganizationRequest,
 from api.dependencies import get_current_user
 from config.database import organizations_collection, users_collection
 from pydantic import BaseModel
+from utils.permissions import is_super_admin
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
@@ -168,6 +169,13 @@ async def create_organization(
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Super admin cannot create organizations
+        if is_super_admin(user_doc):
+            raise HTTPException(
+                status_code=403,
+                detail="Super admin cannot create organizations. Super admin belongs to a single special organization."
+            )
         
         user_id = str(user_doc["_id"])
         now = datetime.utcnow()

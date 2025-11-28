@@ -9,9 +9,76 @@ from config.database import contacts_collection
 from services.activity_log import log_contact_created
 from utils.performance import time_operation, time_database_query
 from utils.query_filters import get_user_ids
-from utils.permissions import has_contact_permission
+from utils.permissions import has_contact_permission, is_super_admin
+from config.database import users_collection
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
+
+@router.get("/super-admin", response_model=list[ContactResponse])
+async def get_super_admin_contacts(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all CRM users (clients) - only accessible by super admin"""
+    endpoint_start = time.perf_counter()
+    try:
+        user_doc = current_user.get("user_doc")
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found in database")
+        
+        # Check if user is super admin
+        if not is_super_admin(user_doc):
+            raise HTTPException(
+                status_code=403,
+                detail="Only super admin can access this endpoint"
+            )
+        
+        # Get all users from database
+        with time_database_query("users", "find"):
+            cursor = users_collection.find({}).sort("createdAt", -1).skip(skip).limit(limit)
+            users = list(cursor)
+        
+        # Format users as ContactResponse
+        with time_operation("Super Admin Contacts: Transform response", threshold_ms=50.0):
+            result = []
+            for user in users:
+                # Split name into firstName and lastName
+                name = user.get("name", "")
+                name_parts = name.strip().split(" ", 1)
+                first_name = name_parts[0] if name_parts else ""
+                last_name = name_parts[1] if len(name_parts) > 1 else None
+                
+                # Get user's orgId (for reference)
+                user_org_id = user.get("orgId")
+                if isinstance(user_org_id, list):
+                    user_org_id = user_org_id[0] if user_org_id else ""
+                if not user_org_id:
+                    user_org_id = ""
+                
+                result.append(ContactResponse(
+                    id=str(user["_id"]),
+                    firstName=first_name,
+                    lastName=last_name,
+                    email=user.get("email", ""),
+                    phone=None,  # Users don't have phone in user doc
+                    title="CRM User",
+                    accountId=None,
+                    ownerId="",
+                    orgId=user_org_id if isinstance(user_org_id, str) else "",
+                    tags=[],
+                    createdAt=user.get("createdAt").isoformat() if user.get("createdAt") else "",
+                    updatedAt=user.get("updatedAt").isoformat() if user.get("updatedAt") else ""
+                ))
+        
+        endpoint_elapsed = (time.perf_counter() - endpoint_start) * 1000
+        print(f"✅ [GET /api/contacts/super-admin] Total: {endpoint_elapsed:.2f}ms, returned {len(result)} users")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching super admin contacts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch super admin contacts: {str(e)}")
 
 @router.get("", response_model=list[ContactResponse])
 async def get_contacts(

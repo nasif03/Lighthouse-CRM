@@ -18,6 +18,13 @@ from utils.query_filters import get_user_ids
 
 def has_ticket_role(user_doc: dict, org_id: str) -> bool:
     """Check if user has ticket-related role (read:tickets or write:tickets permission)"""
+    # Import here to avoid circular dependency
+    from utils.permissions import is_super_admin
+    
+    # Super admin bypasses all permission checks
+    if is_super_admin(user_doc):
+        return True
+    
     user_id = str(user_doc["_id"])
     
     # Check if user is admin of the organization

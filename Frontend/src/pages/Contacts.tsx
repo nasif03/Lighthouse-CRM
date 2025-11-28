@@ -39,7 +39,8 @@ const getInitials = (firstName: string, lastName?: string): string => {
 
 export default function Contacts() {
   const navigate = useNavigate();
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
+  const isSuperAdmin = user?.isSuperAdmin || false;
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -76,7 +77,9 @@ export default function Contacts() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await apiGet<Contact[]>('/api/contacts', token);
+      // Super admin uses different endpoint to see all CRM users
+      const endpoint = isSuperAdmin ? '/api/contacts/super-admin' : '/api/contacts';
+      const data = await apiGet<Contact[]>(endpoint, token);
       setContacts(data);
     } catch (err: any) {
       if (err.message === 'Request cancelled') {
@@ -92,7 +95,7 @@ export default function Contacts() {
       setIsLoading(false);
       fetchingRef.current = false;
     }
-  }, [token]);
+  }, [token, isSuperAdmin]);
 
   const fetchAccounts = useCallback(async () => {
     if (!token) return;
@@ -251,10 +254,10 @@ export default function Contacts() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contacts</h1>
+        <h1 className="text-2xl font-semibold">{isSuperAdmin ? 'CRM Users' : 'Contacts'}</h1>
         <div className="flex items-center gap-2">
           <Input 
-            placeholder="Search contacts..." 
+            placeholder={isSuperAdmin ? "Search CRM users..." : "Search contacts..."} 
             value={query} 
             onChange={(e) => {
               const value = e.target.value;
@@ -265,12 +268,14 @@ export default function Contacts() {
             className="w-64"
             maxLength={VALIDATION_LIMITS.SEARCH_QUERY}
           />
-          <Button onClick={() => {
-            setError(null);
-            setIsEditMode(false);
-            setEditingId(null);
-            setIsModalOpen(true);
-          }}>New Contact</Button>
+          {!isSuperAdmin && (
+            <Button onClick={() => {
+              setError(null);
+              setIsEditMode(false);
+              setEditingId(null);
+              setIsModalOpen(true);
+            }}>New Contact</Button>
+          )}
         </div>
       </div>
 
@@ -282,7 +287,10 @@ export default function Contacts() {
 
       {filteredContacts.length === 0 ? (
         <div className="text-center py-12 text-gray-600">
-          {query ? 'No contacts found matching your search' : 'No contacts yet. Create your first contact!'}
+          {query 
+            ? (isSuperAdmin ? 'No CRM users found matching your search' : 'No contacts found matching your search')
+            : (isSuperAdmin ? 'No CRM users found.' : 'No contacts yet. Create your first contact!')
+          }
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -365,18 +373,22 @@ export default function Contacts() {
                   >
                     Create Ticket
                   </button>
-                  <button
-                    onClick={() => handleEdit(contact)}
-                    className="px-3 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(contact.id)}
-                    className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
-                  >
-                    Delete
-                  </button>
+                  {!isSuperAdmin && (
+                    <>
+                      <button
+                        onClick={() => handleEdit(contact)}
+                        className="px-3 py-1.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(contact.id)}
+                        className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
