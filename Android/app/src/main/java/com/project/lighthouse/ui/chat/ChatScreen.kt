@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -78,6 +79,7 @@ fun ChatScreen(
     onSendMessage: () -> Unit,
     onGoBackToChannelList: () -> Unit,
     onDismissMessage: () -> Unit,
+    onStartCall: ((String, String?) -> Unit)? = null, // participantId, participantName
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -165,6 +167,7 @@ fun ChatScreen(
                     currentUserId = currentUserId,
                     onUpdateMessageInput = onUpdateMessageInput,
                     onSendMessage = onSendMessage,
+                    onStartCall = onStartCall,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -326,6 +329,7 @@ private fun ConversationView(
     currentUserId: String?,
     onUpdateMessageInput: (String) -> Unit,
     onSendMessage: () -> Unit,
+    onStartCall: ((String, String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -350,6 +354,8 @@ private fun ConversationView(
         // Conversation Header - Fixed at top
         ConversationHeader(
             channel = channel,
+            currentUserId = currentUserId,
+            onStartCall = onStartCall,
             modifier = Modifier.fillMaxWidth()
         )
         
@@ -459,6 +465,8 @@ private fun MessageBubble(
 @Composable
 private fun ConversationHeader(
     channel: ChatChannel,
+    currentUserId: String?,
+    onStartCall: ((String, String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val displayName = channel.name ?: channel.otherMember?.name ?: "Chat"
@@ -499,6 +507,37 @@ private fun ConversationHeader(
                     text = "Online",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = Gray500
+                )
+            }
+            // Call Button - Top right, matching web UI
+            // Always show the call button when in a conversation
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = {
+                    if (onStartCall != null) {
+                        // Try to get participant ID from otherMember, members list, or use channel ID as fallback
+                        val participantId = channel.otherMember?.id 
+                            ?: channel.members?.firstOrNull { it.id != currentUserId }?.id
+                            ?: channel.id // Fallback to channel ID if participant not found
+                        val participantName = channel.otherMember?.name 
+                            ?: channel.members?.firstOrNull { it.id != currentUserId }?.name
+                            ?: channel.name
+                            ?: "Unknown"
+                        onStartCall(participantId, participantName)
+                    }
+                },
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        Color(0xFF10B981), // emerald-500 equivalent
+                        RoundedCornerShape(8.dp)
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Call,
+                    contentDescription = "Start audio call",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

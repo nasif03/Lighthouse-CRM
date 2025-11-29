@@ -2,12 +2,13 @@
 
 # https://arlean-stratagemical-kimberlie.ngrok-free.dev/
 
-# cd /home/niloy/vs_code/course/nbm327/third/Lighthouse-CRM/Android && API_BASE_URL='https://fca03e6338da.ngrok-free.app' ./start.sh
+# cd /home/niloy/vs_code/course/nbm327/third/Lighthouse-CRM/Android && API_BASE_URL='https://aa05ef6206e7.ngrok-free.app' ./start.sh
 #  ngrok --config /home/niloy/snap/ngrok/325/.config/ngrok/ngrok.yml http 3000
 # Everytime build fails u can do only @start.sh (10-12) this till it fixes the build.
 
-
-
+# /mnt/c/Users/User/AppData/Local/Android/Sdk/platform-tools/adb.exe logcat -c
+# /mnt/c/Users/User/AppData/Local/Android/Sdk/platform-tools/adb.exe logcat -d   | grep -n -E 'FATAL EXCEPTION|AndroidRuntime' | head -80
+ 
 set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-${1:-http://10.0.2.2:3000/}}"

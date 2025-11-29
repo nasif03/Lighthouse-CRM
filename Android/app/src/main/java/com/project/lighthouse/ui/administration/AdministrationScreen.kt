@@ -68,6 +68,9 @@ fun AdministrationScreen(
     onUpdateNewRoleName: (String) -> Unit,
     onTogglePermission: (String) -> Unit,
     onAddRole: () -> Unit,
+    onStartEditingRole: (RoleDto) -> Unit,
+    onCancelEditingRole: () -> Unit,
+    onUpdateRole: () -> Unit,
     onDeleteRole: (String) -> Unit,
     onDismissMessage: () -> Unit,
     modifier: Modifier = Modifier
@@ -246,6 +249,9 @@ fun AdministrationScreen(
                                     onUpdateNewRoleName = onUpdateNewRoleName,
                                     onTogglePermission = onTogglePermission,
                                     onAddRole = onAddRole,
+                                    onStartEditingRole = onStartEditingRole,
+                                    onCancelEditingRole = onCancelEditingRole,
+                                    onUpdateRole = onUpdateRole,
                                     onDeleteRole = { showDeleteConfirm = it }
                                 )
                             }
@@ -507,6 +513,9 @@ private fun RolesSection(
     onUpdateNewRoleName: (String) -> Unit,
     onTogglePermission: (String) -> Unit,
     onAddRole: () -> Unit,
+    onStartEditingRole: (RoleDto) -> Unit,
+    onCancelEditingRole: () -> Unit,
+    onUpdateRole: () -> Unit,
     onDeleteRole: (String) -> Unit
 ) {
     WebStyleCard(modifier = Modifier.fillMaxWidth()) {
@@ -518,10 +527,10 @@ private fun RolesSection(
                 color = Gray900
             )
 
-            // Create Role Form
+            // Create/Edit Role Form
             HorizontalDivider()
             Text(
-                text = "Create Role",
+                text = if (state.editingRoleId != null) "Edit Role" else "Create Role",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = Gray700,
@@ -563,18 +572,47 @@ private fun RolesSection(
                     }
                 }
             }
-            Button(
-                onClick = onAddRole,
-                enabled = state.newRoleName.isNotBlank() && !state.isAddingRole,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (state.isAddingRole) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.height(16.dp),
-                        strokeWidth = 2.dp
-                    )
+                if (state.editingRoleId != null) {
+                    Button(
+                        onClick = onCancelEditingRole,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Text("Cancel", fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = onUpdateRole,
+                        enabled = state.newRoleName.isNotBlank() && !state.isUpdatingRole,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (state.isUpdatingRole) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.height(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Update Role", fontSize = 13.sp)
+                        }
+                    }
                 } else {
-                    Text("Create Role", fontSize = 13.sp)
+                    Button(
+                        onClick = onAddRole,
+                        enabled = state.newRoleName.isNotBlank() && !state.isAddingRole,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (state.isAddingRole) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.height(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Create Role", fontSize = 13.sp)
+                        }
+                    }
                 }
             }
 
@@ -594,7 +632,14 @@ private fun RolesSection(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     state.roles.forEach { role ->
-                        RoleItem(role = role, onDelete = { onDeleteRole(role.id) })
+                        RoleItem(
+                            role = role,
+                            onDelete = { onDeleteRole(role.id) },
+                            onEdit = { roleToEdit ->
+                                // Start editing this role
+                                onStartEditingRole(roleToEdit)
+                            }
+                        )
                     }
                 }
             }
@@ -605,42 +650,61 @@ private fun RolesSection(
 @Composable
 private fun RoleItem(
     role: RoleDto,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: (RoleDto) -> Unit
 ) {
-    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
+    WebStyleCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEdit(role) }
+    ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = role.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Gray900
-                )
-                Button(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete", fontSize = 11.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = role.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Gray900
+                    )
+                    if (role.permissions.isNotEmpty()) {
+                        Text(
+                            text = "Permissions: ${role.permissions.joinToString(", ")}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray500,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "No permissions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Gray400,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
-            }
-            if (role.permissions.isNotEmpty()) {
-                Text(
-                    text = "Permissions: ${role.permissions.joinToString()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Gray500,
-                    fontSize = 11.sp
-                )
-            } else {
-                Text(
-                    text = "No permissions",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Gray400,
-                    fontSize = 11.sp
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { onEdit(role) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand600),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Edit", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Delete", fontSize = 11.sp)
+                    }
+                }
             }
         }
     }

@@ -38,6 +38,8 @@ data class AdministrationState(
     
     // Role management
     val isAddingRole: Boolean = false,
+    val isUpdatingRole: Boolean = false,
+    val editingRoleId: String? = null,
     val newRoleName: String = "",
     val newRolePermissions: List<String> = emptyList()
 )

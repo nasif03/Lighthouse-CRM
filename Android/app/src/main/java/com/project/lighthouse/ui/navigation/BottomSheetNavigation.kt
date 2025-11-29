@@ -61,11 +61,13 @@ fun BottomSheetNavigation(
         MainDestination.Dashboard,
         MainDestination.Leads,
         MainDestination.Contacts,
+        MainDestination.Accounts,
         MainDestination.Deals,
         MainDestination.Settings,
         MainDestination.Gmail,
         MainDestination.Meetings,
         MainDestination.Chat,
+        MainDestination.Tickets,
         MainDestination.Administration,
         MainDestination.Calendar,
         MainDestination.SupportAI

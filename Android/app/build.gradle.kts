@@ -39,6 +39,25 @@ android {
             )
         }
     }
+    
+    packaging {
+        resources {
+            // Exclude duplicate files that may come from dependencies
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/license.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
+            excludes += "/META-INF/notice.txt"
+            // Handle duplicate assets - pick first occurrence to avoid conflicts
+            pickFirsts += "**/libc++_shared.so"
+            pickFirsts += "**/libjsc.so"
+            // Handle duplicate threetenbp TZDB.dat file (common issue with Stream SDK)
+            pickFirsts += "assets/org/threeten/bp/TZDB.dat"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -96,4 +115,12 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    
+    // Stream Video SDK for calling functionality (audio-only calls)
+    // Web frontend uses @stream-io/video-react-sdk v1.27.1
+    // Android SDK: Using latest version 1.18.0 from Maven Central
+    // Package: io.getstream:stream-video-android-core
+    // COMMENTED OUT: Temporarily disabled to speed up compilation
+    // implementation("io.getstream:stream-video-android-core:1.18.0")
+    // implementation("io.getstream:stream-video-android-ui-compose:1.18.0")
 }

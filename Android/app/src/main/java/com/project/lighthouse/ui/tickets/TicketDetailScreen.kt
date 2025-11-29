@@ -149,30 +149,64 @@ fun TicketDetailScreen(
                 }
             }
         } else if (state.ticket != null) {
-            Row(
+            // Use single scrollable column for mobile-friendly layout
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Main content - Left 2/3
-                Column(
-                    modifier = Modifier.weight(2f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Ticket Header
+                // Ticket Header
+                item {
                     TicketHeaderCard(
                         ticket = state.ticket,
                         isAdmin = state.isAdmin,
                         onStatusClick = { onToggleStatusModal(true) },
                         onAssignClick = { onToggleAssignModal(true) }
                     )
+                }
 
-                    // Description
+                // Description
+                item {
                     TicketDescriptionCard(ticket = state.ticket)
+                }
 
-                    // Comments
+                // Customer Info
+                item {
+                    CustomerInfoCard(ticket = state.ticket)
+                }
+
+                // Assignment
+                item {
+                    AssignmentCard(
+                        ticket = state.ticket,
+                        isAdmin = state.isAdmin,
+                        onAssignClick = { onToggleAssignModal(true) }
+                    )
+                }
+
+                // Priority
+                item {
+                    PriorityCard(
+                        ticket = state.ticket,
+                        selectedPriority = state.selectedPriority,
+                        onPriorityChange = onUpdatePriority
+                    )
+                }
+
+                // Jira Integration
+                item {
+                    JiraIntegrationCard(
+                        ticket = state.ticket,
+                        onCreateJiraIssue = {
+                            // TODO: Implement Jira issue creation
+                        }
+                    )
+                }
+
+                // Comments
+                item {
                     TicketCommentsCard(
                         comments = state.comments,
                         newComment = state.newComment,
@@ -180,37 +214,6 @@ fun TicketDetailScreen(
                         onUpdateComment = onUpdateNewComment,
                         onToggleInternalNote = onToggleInternalNote,
                         onAddComment = { onAddComment(state.newComment, state.isInternalNote) }
-                    )
-                }
-
-                // Sidebar - Right 1/3
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Customer Info
-                    CustomerInfoCard(ticket = state.ticket)
-
-                    // Assignment
-                    AssignmentCard(
-                        ticket = state.ticket,
-                        isAdmin = state.isAdmin,
-                        onAssignClick = { onToggleAssignModal(true) }
-                    )
-
-                    // Priority
-                    PriorityCard(
-                        ticket = state.ticket,
-                        selectedPriority = state.selectedPriority,
-                        onPriorityChange = onUpdatePriority
-                    )
-
-                    // Jira Integration
-                    JiraIntegrationCard(
-                        ticket = state.ticket,
-                        onCreateJiraIssue = {
-                            // TODO: Implement Jira issue creation
-                        }
                     )
                 }
             }

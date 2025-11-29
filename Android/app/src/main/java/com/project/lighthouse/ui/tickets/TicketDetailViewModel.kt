@@ -158,9 +158,10 @@ class TicketDetailViewModel(
             )
             result.onSuccess { updatedTicket ->
                 Log.d(TAG, "Ticket assigned: $employeeId")
+                // Reload ticket to get updated assignedToName (matching frontend behavior)
+                loadTicket()
                 _state.update {
                     it.copy(
-                        ticket = updatedTicket,
                         selectedAssignee = employeeId ?: "unassigned",
                         showAssignModal = false,
                         isUpdating = false

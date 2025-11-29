@@ -3,6 +3,7 @@ package com.project.lighthouse.ui.administration
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.lighthouse.data.model.RoleDto
 import com.project.lighthouse.data.repository.EmployeesRepository
 import com.project.lighthouse.data.repository.OrganizationRepository
 import com.project.lighthouse.data.repository.RolesRepository
@@ -338,6 +339,70 @@ class AdministrationViewModel(
                     it.copy(
                         isAddingRole = false,
                         errorMessage = error.message ?: "Failed to create role"
+                    )
+                }
+            }
+        }
+    }
+
+    fun startEditingRole(role: RoleDto) {
+        _state.update {
+            it.copy(
+                editingRoleId = role.id,
+                newRoleName = role.name,
+                newRolePermissions = role.permissions.toList()
+            )
+        }
+    }
+
+    fun cancelEditingRole() {
+        _state.update {
+            it.copy(
+                editingRoleId = null,
+                newRoleName = "",
+                newRolePermissions = emptyList()
+            )
+        }
+    }
+
+    fun updateRole() {
+        val current = _state.value
+        val orgId = current.selectedOrgId
+        val roleId = current.editingRoleId
+        if (orgId == null || roleId == null) {
+            _state.update { it.copy(errorMessage = "Please select an organization and role first") }
+            return
+        }
+        if (current.newRoleName.isBlank()) {
+            _state.update { it.copy(errorMessage = "Role name is required") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isUpdatingRole = true, errorMessage = null) }
+            val result = rolesRepository.updateRole(
+                orgId = orgId,
+                roleId = roleId,
+                name = current.newRoleName.trim(),
+                permissions = current.newRolePermissions
+            )
+            result.onSuccess { updatedRole ->
+                Log.d(TAG, "Role updated: $roleId")
+                _state.update {
+                    it.copy(
+                        roles = it.roles.map { if (it.id == roleId) updatedRole else it },
+                        isUpdatingRole = false,
+                        editingRoleId = null,
+                        newRoleName = "",
+                        newRolePermissions = emptyList(),
+                        infoMessage = "Role updated successfully"
+                    )
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to update role: ${error.message}", error)
+                _state.update {
+                    it.copy(
+                        isUpdatingRole = false,
+                        errorMessage = error.message ?: "Failed to update role"
                     )
                 }
             }
