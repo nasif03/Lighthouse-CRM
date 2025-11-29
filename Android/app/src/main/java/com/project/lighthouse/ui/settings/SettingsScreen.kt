@@ -209,7 +209,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
-                items(state.organizations, key = { it.id }) { org ->
+                items(
+                    state.organizations,
+                    key = { org -> "org-${org.id}" }
+                ) { org ->
                     OrganizationItem(org)
                 }
             }
@@ -225,7 +228,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
-                items(tenantList.tenants, key = { it.id }) { tenant ->
+                items(
+                    tenantList.tenants,
+                    key = { tenant -> "tenant-${tenant.id}" }
+                ) { tenant ->
                     TenantItem(
                         tenant = tenant,
                         isActive = tenantList.activeTenantId == tenant.id,
