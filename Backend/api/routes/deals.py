@@ -84,10 +84,11 @@ async def create_deal(request: CreateDealRequest, current_user: dict = Depends(g
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        owner_id = str(user_doc["_id"])
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        from utils.query_filters import get_user_ids
+        user_ids = get_user_ids(user_doc)
+        owner_id = user_ids["ownerId"]
+        org_id = user_ids["orgId"]
         
         now = datetime.utcnow()
         close_date = None
@@ -244,9 +245,10 @@ async def delete_deal(deal_id: str, current_user: dict = Depends(get_current_use
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        from utils.query_filters import get_user_ids
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         deal = deals_collection.find_one({"_id": ObjectId(deal_id), "orgId": org_id})
         if not deal:

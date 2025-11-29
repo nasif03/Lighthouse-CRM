@@ -147,10 +147,10 @@ async def create_contact(request: CreateContactRequest, current_user: dict = Dep
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        owner_id = str(user_doc["_id"])
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        owner_id = user_ids["ownerId"]
+        org_id = user_ids["orgId"]
         
         now = datetime.utcnow()
         
@@ -205,9 +205,9 @@ async def update_contact(contact_id: str, request: UpdateContactRequest, current
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         contact = contacts_collection.find_one({"_id": ObjectId(contact_id), "orgId": org_id})
         if not contact:
@@ -260,9 +260,9 @@ async def delete_contact(contact_id: str, current_user: dict = Depends(get_curre
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        org_id = user_doc.get("orgId")
-        if not org_id:
-            raise HTTPException(status_code=400, detail="User must belong to an organization")
+        # Use get_user_ids to properly handle orgId (array/string and activeOrgId)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
         
         contact = contacts_collection.find_one({"_id": ObjectId(contact_id), "orgId": org_id})
         if not contact:
