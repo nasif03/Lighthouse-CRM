@@ -90,7 +90,7 @@ import com.project.lighthouse.ui.leads.LeadsScreen
 import com.project.lighthouse.ui.leads.LeadsViewModel
 import com.project.lighthouse.ui.leads.LeadsViewModelFactory
 import com.project.lighthouse.ui.navigation.MainDestination
-import com.project.lighthouse.ui.navigation.CollapsibleBottomBar
+import com.project.lighthouse.ui.navigation.BottomSheetNavigation
 import com.project.lighthouse.ui.settings.SettingsScreen
 import com.project.lighthouse.ui.settings.SettingsViewModel
 import com.project.lighthouse.ui.settings.SettingsViewModelFactory
@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
                             val showBottomBar = authState.isAuthenticated && this@MainActivity.shouldShowBottomBar(currentDestination)
                             Log.d(TAG, "Bottom bar visible? $showBottomBar route=${currentDestination?.route}")
                             if (showBottomBar) {
-                                this@MainActivity.LighthouseBottomBar(
+                                BottomSheetNavigation(
                                     currentDestination = currentDestination,
                                     onNavigate = { destination ->
                                         Log.d(TAG, "Navigating to ${destination.route}")
@@ -725,37 +725,21 @@ class MainActivity : ComponentActivity() {
         authViewModel.checkAuthState()
     }
 
-    @Composable
-    private fun LighthouseBottomBar(
-        currentDestination: NavDestination?,
-        onNavigate: (MainDestination) -> Unit
-    ) {
-        NavigationBar {
-            MainDestination.bottomNavItems.forEach { destination ->
-                val selected = currentDestination?.route == destination.route
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { onNavigate(destination) },
-                    icon = {
-                        Icon(
-                            painter = painterResource(id = destination.iconRes),
-                            contentDescription = stringResource(id = destination.labelRes)
-                        )
-                    },
-                    label = {
-                        Text(
-                            text = stringResource(id = destination.labelRes),
-                            fontSize = 11.sp,
-                            maxLines = 1
-                        )
-                    },
-                    alwaysShowLabel = true
-                )
-            }
-        }
-    }
-
     private fun shouldShowBottomBar(destination: NavDestination?): Boolean {
-        return MainDestination.bottomNavItems.any { it.route == destination?.route }
+        // Show bottom bar for all main destinations except sign-in and detail screens
+        val mainRoutes = listOf(
+            MainDestination.Dashboard.route,
+            MainDestination.Leads.route,
+            MainDestination.Contacts.route,
+            MainDestination.Deals.route,
+            MainDestination.Settings.route,
+            MainDestination.Gmail.route,
+            MainDestination.Meetings.route,
+            MainDestination.Chat.route,
+            MainDestination.Administration.route,
+            MainDestination.Calendar.route,
+            MainDestination.SupportAI.route
+        )
+        return destination?.route in mainRoutes
     }
 }
