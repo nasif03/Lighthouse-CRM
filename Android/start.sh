@@ -2,7 +2,7 @@
 
 # https://arlean-stratagemical-kimberlie.ngrok-free.dev/
 
-# cd /home/niloy/vs_code/course/nbm327/third/Lighthouse-CRM/Android && API_BASE_URL='https://f02fcf3975a3.ngrok-free.app' ./start.sh
+# cd /home/niloy/vs_code/course/nbm327/third/Lighthouse-CRM/Android && API_BASE_URL='https://fca03e6338da.ngrok-free.app' ./start.sh
 #  ngrok --config /home/niloy/snap/ngrok/325/.config/ngrok/ngrok.yml http 3000
 # Everytime build fails u can do only @start.sh (10-12) this till it fixes the build.
 

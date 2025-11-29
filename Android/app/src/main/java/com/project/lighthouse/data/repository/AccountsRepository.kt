@@ -3,6 +3,7 @@ package com.project.lighthouse.data.repository
 import com.project.lighthouse.data.api.ApiClient
 import com.project.lighthouse.data.api.ApiException
 import com.project.lighthouse.data.model.AccountDto
+import com.project.lighthouse.data.model.AccountDetailsResponse
 import com.project.lighthouse.data.model.CreateAccountRequest
 import com.project.lighthouse.data.model.UpdateAccountRequest
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,22 @@ class AccountsRepository {
             } else {
                 val errorBody = response.errorBody()?.string().orEmpty()
                 Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to delete account" }))
+            }
+        } catch (e: IOException) {
+            Result.failure(ApiException.NetworkError("Network error: ${e.message}"))
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownError("Unexpected error: ${e.message}"))
+        }
+    }
+
+    suspend fun getAccountDetails(accountId: String): Result<AccountDetailsResponse> = withContext(Dispatchers.IO) {
+        try {
+            val response = ApiClient.accountsApi.getAccountDetails(accountId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val errorBody = response.errorBody()?.string().orEmpty()
+                Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to fetch account details" }))
             }
         } catch (e: IOException) {
             Result.failure(ApiException.NetworkError("Network error: ${e.message}"))

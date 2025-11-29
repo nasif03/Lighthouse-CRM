@@ -27,6 +27,8 @@ data class TicketsState(
     val isAdmin: Boolean = false,
     val assignableEmployees: List<AssignableEmployee> = emptyList(),
     val filterStatus: String? = null,
-    val filterPriority: String? = null
+    val filterPriority: String? = null,
+    val searchQuery: String = "",
+    val createdTicketId: String? = null // For navigation after creation
 )
 

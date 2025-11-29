@@ -74,5 +74,9 @@ object ApiClient {
     val ticketsApi: TicketsApiService = retrofit.create(TicketsApiService::class.java)
     val chatApi: ChatApiService = retrofit.create(ChatApiService::class.java)
     val supportChatApi: SupportChatApiService = retrofit.create(SupportChatApiService::class.java)
+    val calendarApi: CalendarApiService = retrofit.create(CalendarApiService::class.java)
+    val firefliesApi: FirefliesApiService = retrofit.create(FirefliesApiService::class.java)
+    val employeesApi: EmployeesApiService = retrofit.create(EmployeesApiService::class.java)
+    val rolesApi: RolesApiService = retrofit.create(RolesApiService::class.java)
 }
 

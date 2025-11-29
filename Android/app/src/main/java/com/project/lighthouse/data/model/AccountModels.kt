@@ -31,3 +31,24 @@ data class UpdateAccountRequest(
     @SerializedName("status") val status: String? = null
 )
 
+data class AccountDetailsResponse(
+    @SerializedName("account") val account: AccountDto,
+    @SerializedName("contacts") val contacts: List<AccountContactDto>,
+    @SerializedName("deals") val deals: List<AccountDealDto>
+)
+
+data class AccountContactDto(
+    @SerializedName("id") val id: String,
+    @SerializedName("firstName") val firstName: String,
+    @SerializedName("lastName") val lastName: String?,
+    @SerializedName("email") val email: String
+)
+
+data class AccountDealDto(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("amount") val amount: Double?,
+    @SerializedName("currency") val currency: String?,
+    @SerializedName("status") val status: String
+)
+

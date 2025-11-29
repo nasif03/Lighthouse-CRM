@@ -5,7 +5,9 @@ import com.project.lighthouse.data.api.ApiClient
 import com.project.lighthouse.data.local.TokenManager
 import com.project.lighthouse.data.repository.AccountsRepository
 import com.project.lighthouse.data.repository.AuthRepository
+import com.project.lighthouse.data.repository.CalendarRepository
 import com.project.lighthouse.data.repository.ContactsRepository
+import com.project.lighthouse.data.repository.FirefliesRepository
 import com.project.lighthouse.data.repository.DashboardRepository
 import com.project.lighthouse.data.repository.DealsRepository
 import com.project.lighthouse.data.repository.ChatRepository
@@ -14,7 +16,9 @@ import com.project.lighthouse.data.repository.SupportChatRepository
 import com.project.lighthouse.data.repository.JiraRepository
 import com.project.lighthouse.data.repository.LeadsRepository
 import com.project.lighthouse.data.repository.MeetingsRepository
+import com.project.lighthouse.data.repository.EmployeesRepository
 import com.project.lighthouse.data.repository.OrganizationRepository
+import com.project.lighthouse.data.repository.RolesRepository
 import com.project.lighthouse.data.repository.TicketsRepository
 import com.project.lighthouse.ui.auth.AuthViewModel
 
@@ -26,6 +30,8 @@ object AppModule {
     private var contactsRepository: ContactsRepository? = null
     private var dealsRepository: DealsRepository? = null
     private var accountsRepository: AccountsRepository? = null
+    private var calendarRepository: CalendarRepository? = null
+    private var firefliesRepository: FirefliesRepository? = null
     private var organizationRepository: OrganizationRepository? = null
     private var gmailRepository: GmailRepository? = null
     private var meetingsRepository: MeetingsRepository? = null
@@ -33,6 +39,8 @@ object AppModule {
     private var ticketsRepository: TicketsRepository? = null
     private var chatRepository: ChatRepository? = null
     private var supportChatRepository: SupportChatRepository? = null
+    private var employeesRepository: EmployeesRepository? = null
+    private var rolesRepository: RolesRepository? = null
 
     fun initialize(context: Context) {
         // Initialize TokenManager
@@ -48,6 +56,8 @@ object AppModule {
         contactsRepository = ContactsRepository()
         dealsRepository = DealsRepository()
         accountsRepository = AccountsRepository()
+        calendarRepository = CalendarRepository()
+        firefliesRepository = FirefliesRepository()
         organizationRepository = OrganizationRepository()
         gmailRepository = GmailRepository()
         meetingsRepository = MeetingsRepository()
@@ -55,6 +65,8 @@ object AppModule {
         ticketsRepository = TicketsRepository()
         chatRepository = ChatRepository()
         supportChatRepository = SupportChatRepository()
+        employeesRepository = EmployeesRepository()
+        rolesRepository = RolesRepository()
     }
 
     fun getTokenManager(context: Context): TokenManager {
@@ -106,6 +118,20 @@ object AppModule {
         return accountsRepository!!
     }
 
+    fun getCalendarRepository(context: Context): CalendarRepository {
+        if (calendarRepository == null) {
+            initialize(context)
+        }
+        return calendarRepository!!
+    }
+
+    fun getFirefliesRepository(context: Context): FirefliesRepository {
+        if (firefliesRepository == null) {
+            initialize(context)
+        }
+        return firefliesRepository!!
+    }
+
     fun getOrganizationRepository(context: Context): OrganizationRepository {
         if (organizationRepository == null) {
             initialize(context)
@@ -153,6 +179,20 @@ object AppModule {
             initialize(context)
         }
         return supportChatRepository!!
+    }
+
+    fun getEmployeesRepository(context: Context): EmployeesRepository {
+        if (employeesRepository == null) {
+            initialize(context)
+        }
+        return employeesRepository!!
+    }
+
+    fun getRolesRepository(context: Context): RolesRepository {
+        if (rolesRepository == null) {
+            initialize(context)
+        }
+        return rolesRepository!!
     }
 
     fun getAuthViewModel(context: Context): AuthViewModel {

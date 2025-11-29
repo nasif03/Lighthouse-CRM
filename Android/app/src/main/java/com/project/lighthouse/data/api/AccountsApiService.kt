@@ -1,6 +1,7 @@
 package com.project.lighthouse.data.api
 
 import com.project.lighthouse.data.model.AccountDto
+import com.project.lighthouse.data.model.AccountDetailsResponse
 import com.project.lighthouse.data.model.CreateAccountRequest
 import com.project.lighthouse.data.model.UpdateAccountRequest
 import retrofit2.Response
@@ -31,5 +32,10 @@ interface AccountsApiService {
     suspend fun deleteAccount(
         @Path("accountId") accountId: String
     ): Response<Map<String, String>>
+
+    @GET("api/accounts/{accountId}")
+    suspend fun getAccountDetails(
+        @Path("accountId") accountId: String
+    ): Response<AccountDetailsResponse>
 }
 

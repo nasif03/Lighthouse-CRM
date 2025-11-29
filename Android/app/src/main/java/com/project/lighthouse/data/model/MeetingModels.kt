@@ -19,16 +19,16 @@ data class MeetingResponse(
     @SerializedName("end_time") val endTime: String
 )
 
-data class FirefliesSummary(
+data class MeetingFirefliesSummary(
     @SerializedName("overview") val overview: String? = null,
     @SerializedName("short_summary") val shortSummary: String? = null
 )
 
-data class FirefliesTranscript(
+data class MeetingFirefliesTranscript(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String? = null,
     @SerializedName("date") val date: Long,
     @SerializedName("transcript_url") val transcriptUrl: String? = null,
-    @SerializedName("summary") val summary: FirefliesSummary? = null
+    @SerializedName("summary") val summary: MeetingFirefliesSummary? = null
 )
 

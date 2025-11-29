@@ -101,6 +101,11 @@ class TicketsViewModel(
         refreshTickets(initial = true)
     }
 
+    fun setSearchQuery(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+        refreshTickets(initial = true)
+    }
+
     fun toggleCreateDialog(show: Boolean) {
         Log.d("TicketsViewModel", "toggleCreateDialog: $show")
         _state.update { it.copy(showCreateDialog = show, errorMessage = null, infoMessage = null) }
@@ -172,7 +177,8 @@ class TicketsViewModel(
                     it.copy(
                         createTicketFormState = CreateTicketFormState(),
                         showCreateDialog = false,
-                        infoMessage = "Ticket created: ${ticket.ticketNumber}"
+                        infoMessage = "Ticket created: ${ticket.ticketNumber}",
+                        createdTicketId = ticket.id
                     )
                 }
                 refreshTickets()
@@ -224,6 +230,10 @@ class TicketsViewModel(
 
     fun dismissMessage() {
         _state.update { it.copy(errorMessage = null, infoMessage = null) }
+    }
+
+    fun clearCreatedTicketId() {
+        _state.update { it.copy(createdTicketId = null) }
     }
 
     companion object {

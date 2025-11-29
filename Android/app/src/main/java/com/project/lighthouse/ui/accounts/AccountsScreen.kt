@@ -1,5 +1,6 @@
 package com.project.lighthouse.ui.accounts
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,6 +57,7 @@ fun AccountsScreen(
     onUpdateForm: (String?, String?, String?, String?, String?) -> Unit,
     onToggleDialog: (Boolean, String?) -> Unit,
     onDeleteAccount: (String) -> Unit,
+    onAccountClick: (String) -> Unit,
     onDismissMessage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -153,6 +155,7 @@ fun AccountsScreen(
                         account = account,
                         onEdit = { onToggleDialog(true, account.id) },
                         onDelete = { onDeleteAccount(account.id) },
+                        onClick = { onAccountClick(account.id) },
                         isBusy = state.actionInProgress == account.id
                     )
                 }
@@ -175,10 +178,15 @@ private fun AccountCard(
     account: AccountDto,
     isBusy: Boolean,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     WebStyleCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .clickable(onClick = onClick)
+        ) {
             // Name
             Text(
                 text = account.name,

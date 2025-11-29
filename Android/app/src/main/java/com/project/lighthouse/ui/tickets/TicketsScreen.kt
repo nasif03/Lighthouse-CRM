@@ -3,6 +3,7 @@ package com.project.lighthouse.ui.tickets
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,10 +56,15 @@ import com.project.lighthouse.R
 import com.project.lighthouse.data.model.TicketDto
 import com.project.lighthouse.ui.common.StatusChip
 import com.project.lighthouse.ui.theme.Brand600
+import com.project.lighthouse.ui.common.WebStyleCard
+import com.project.lighthouse.ui.theme.Blue600
 import com.project.lighthouse.ui.theme.Gray400
 import com.project.lighthouse.ui.theme.Gray500
+import com.project.lighthouse.ui.theme.Gray600
 import com.project.lighthouse.ui.theme.Gray700
 import com.project.lighthouse.ui.theme.Gray900
+import com.project.lighthouse.ui.theme.Green600
+import com.project.lighthouse.ui.theme.Yellow600
 
 private val ticketStatuses = listOf("open", "in_progress", "resolved", "closed")
 private val ticketPriorities = listOf("low", "medium", "high", "urgent")
@@ -75,7 +81,10 @@ fun TicketsScreen(
     onToggleUpdateDialog: (Boolean, TicketDto?) -> Unit,
     onUpdateTicket: (String, String?, String?, String?, String?) -> Unit,
     onSetFilter: (String?, String?) -> Unit,
+    onSetSearchQuery: (String) -> Unit,
+    onNavigateToCreateTicket: () -> Unit,
     onDismissMessage: () -> Unit,
+    onViewDetails: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -111,7 +120,7 @@ fun TicketsScreen(
         },
         floatingActionButton = {
             if (orgId != null) {
-                FloatingActionButton(onClick = { onToggleCreateDialog(true) }) {
+                FloatingActionButton(onClick = onNavigateToCreateTicket) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_leads),
                         contentDescription = "Create Ticket"
@@ -158,6 +167,17 @@ fun TicketsScreen(
                 )
             }
         } else {
+            // Calculate stats
+            val stats = com.project.lighthouse.ui.tickets.calculateStats(state.tickets)
+            
+            // Filter tickets
+            val filteredTickets = com.project.lighthouse.ui.tickets.filterTickets(
+                tickets = state.tickets,
+                searchQuery = state.searchQuery,
+                statusFilter = state.filterStatus,
+                priorityFilter = state.filterPriority
+            )
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -165,15 +185,32 @@ fun TicketsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Filter section
+                // Stats Dashboard
                 item {
-                    TicketFilters(
-                        currentStatus = state.filterStatus,
-                        currentPriority = state.filterPriority,
-                        onSetFilter = onSetFilter
-                    )
+                    com.project.lighthouse.ui.tickets.TicketStatsDashboard(stats = stats)
                 }
-                items(state.tickets, key = { it.id }) { ticket ->
+                
+                // Search and Filters
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = state.searchQuery,
+                            onValueChange = onSetSearchQuery,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Search by ticket ID, subject, customer name, or email...") },
+                            singleLine = true
+                        )
+                        TicketFilters(
+                            currentStatus = state.filterStatus,
+                            currentPriority = state.filterPriority,
+                            onSetFilter = onSetFilter
+                        )
+                    }
+                }
+
+                // Use a stable, unique key per ticket to avoid LazyColumn key collisions.
+                // Backend guarantees ticketNumber uniqueness, so prefer that over id.
+                items(filteredTickets, key = { it.ticketNumber }) { ticket ->
                     TicketCard(
                         ticket = ticket,
                         isAdmin = state.isAdmin,
@@ -189,7 +226,8 @@ fun TicketsScreen(
                                 Log.e("TicketsScreen", "Failed to open Jira URL", e)
                             }
                         },
-                        onToggleUpdateDialog = { onToggleUpdateDialog(true, ticket) }
+                        onToggleUpdateDialog = { onToggleUpdateDialog(true, ticket) },
+                        onViewDetails = { onViewDetails(ticket.id) }
                     )
                 }
             }
@@ -312,10 +350,13 @@ private fun TicketCard(
     assignableEmployees: List<com.project.lighthouse.data.model.AssignableEmployee>,
     onUpdate: (String?, String?, String?, String?) -> Unit,
     onOpenJira: (String) -> Unit,
-    onToggleUpdateDialog: () -> Unit
+    onToggleUpdateDialog: () -> Unit,
+    onViewDetails: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onViewDetails),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp)

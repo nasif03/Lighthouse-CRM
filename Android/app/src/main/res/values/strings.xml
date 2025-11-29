@@ -6,11 +6,17 @@
     <string name="nav_contacts">Contacts</string>
     <string name="nav_deals">Deals</string>
     <string name="nav_accounts">Accounts</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_fireflies">Fireflies</string>
+    <string name="nav_support_ai">Support AI</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_gmail">Gmail</string>
     <string name="nav_meetings">Meetings</string>
     <string name="nav_jira">Jira</string>
     <string name="nav_tickets">Tickets</string>
+    <string name="nav_create_ticket">Create Ticket</string>
+    <string name="nav_administration">Administration</string>
+    <string name="nav_submit_ticket">Submit Ticket</string>
     <string name="nav_chat">Chat</string>
     <string name="nav_support_chat">Support</string>
 </resources>
