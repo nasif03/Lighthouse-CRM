@@ -93,11 +93,13 @@ function CustomMessageList() {
   return (
     <div 
       ref={messagesContainerRef}
-      className="flex-1 overflow-y-auto px-3 py-2 min-h-0"
-      style={{ 
-        maxHeight: '100%',
+      className="messages-list"
+      style={{
+        flex: 1,
+        padding: '10px',
         overflowY: 'auto',
-        overflowX: 'hidden'
+        overflowX: 'hidden',
+        position: 'static'
       }}
     >
       {sortedMessages.map((message: any) => (
@@ -127,7 +129,19 @@ function CustomMessageInput() {
   };
 
   return (
-    <div className="p-3 border-t border-gray-200 flex-shrink-0 bg-white flex gap-2">
+    <div 
+      className="chat-input"
+      style={{
+        padding: '10px',
+        borderTop: '1px solid #ccc',
+        background: 'white',
+        position: 'static',
+        height: 'auto',
+        display: 'flex',
+        gap: '8px',
+        flexShrink: 0
+      }}
+    >
       <Input
         placeholder="Type a message..."
         value={inputValue}
@@ -227,7 +241,19 @@ export default function StreamConversationView() {
 
   if (chatLoading || !client) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div 
+        className="chat-container"
+        style={{
+          height: '420px',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
         <div className="text-gray-500">Loading chat...</div>
       </div>
     );
@@ -235,7 +261,19 @@ export default function StreamConversationView() {
 
   if (!hasConversation || !hasChannelInfo) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div 
+        className="chat-container"
+        style={{
+          height: '420px',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
         <div className="text-gray-500 text-center">
           {!hasConversation ? 'Conversation not found' : 'Missing channel info'}
         </div>
@@ -249,7 +287,20 @@ export default function StreamConversationView() {
 
   if (!channel) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-4">
+      <div 
+        className="chat-container"
+        style={{
+          height: '420px',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}
+      >
         <div className="text-gray-500 mb-2">
           {channelError || 'Loading conversation...'}
         </div>
@@ -258,9 +309,19 @@ export default function StreamConversationView() {
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg flex flex-col" style={{ height: '400px', maxHeight: '400px' }}>
+    <div 
+      className="chat-container"
+      style={{
+        height: '420px',
+        display: 'flex',
+        flexDirection: 'column',
+        border: '1px solid #ddd',
+        borderRadius: '8px',
+        overflow: 'hidden'
+      }}
+    >
       {/* Chat Header - Fixed at top of chat box */}
-      <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white rounded-t-lg">
+      <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold overflow-hidden">
             {conversation.participantAvatar && conversation.participantAvatar.startsWith('http') ? (

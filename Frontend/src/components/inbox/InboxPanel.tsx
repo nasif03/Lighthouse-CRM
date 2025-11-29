@@ -45,11 +45,34 @@ export default function InboxPanel() {
 							<StreamConversationView />
 						</Chat>
 					) : isLoading ? (
-						<div className="border border-gray-200 rounded-lg flex items-center justify-center" style={{ height: '400px' }}>
+						<div 
+							style={{ 
+								height: '420px',
+								display: 'flex',
+								flexDirection: 'column',
+								border: '1px solid #ddd',
+								borderRadius: '8px',
+								overflow: 'hidden',
+								alignItems: 'center',
+								justifyContent: 'center'
+							}}
+						>
 							<div className="text-gray-500">Loading chat...</div>
 						</div>
 					) : (
-						<div className="border border-gray-200 rounded-lg flex items-center justify-center p-4" style={{ height: '400px' }}>
+						<div 
+							style={{ 
+								height: '420px',
+								display: 'flex',
+								flexDirection: 'column',
+								border: '1px solid #ddd',
+								borderRadius: '8px',
+								overflow: 'hidden',
+								alignItems: 'center',
+								justifyContent: 'center',
+								padding: '16px'
+							}}
+						>
 							<div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded p-4">
 								Chat client not ready. Please wait a moment and try again.
 							</div>
