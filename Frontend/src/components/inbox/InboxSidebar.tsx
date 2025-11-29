@@ -98,11 +98,11 @@ export default function InboxSidebar() {
 
   return (
     <>
-      <div className="h-full w-full flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200">
+      <div className="w-full flex flex-col">
+        {/* New Conversation Button */}
+        <div className="px-4 py-3 flex-shrink-0">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <h2 className="text-lg font-semibold">Inbox</h2>
-            <span className="text-xs text-gray-500">{activeTenantName}</span>  {/* Show name instead of ID */}
+            <span className="text-xs text-gray-500">{activeTenantName}</span>
           </div>
           <button
             onClick={() => setShowNewConversationModal(true)}
@@ -114,17 +114,18 @@ export default function InboxSidebar() {
             New Conversation
           </button>
         </div>
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {isLoading ? (
-          <div className="text-center text-gray-500 py-4 text-sm">Loading conversations...</div>
-        ) : conversations.length === 0 ? (
-          <div className="text-center text-gray-500 py-4 text-sm">No conversations yet</div>
-        ) : (
-          conversations.map((conv) => (
-            <ConversationItem key={conv.id} conversation={conv} />
-          ))
-        )}
-      </div>
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1 min-h-0" style={{ maxHeight: '400px' }}>
+          {isLoading ? (
+            <div className="text-center text-gray-500 py-4 text-sm">Loading conversations...</div>
+          ) : conversations.length === 0 ? (
+            <div className="text-center text-gray-500 py-4 text-sm">No conversations yet</div>
+          ) : (
+            conversations.map((conv) => (
+              <ConversationItem key={conv.id} conversation={conv} />
+            ))
+          )}
+        </div>
       </div>
       
       <NewConversationModal

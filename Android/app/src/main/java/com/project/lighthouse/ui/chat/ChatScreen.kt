@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -68,6 +69,7 @@ import java.util.Locale
 @Composable
 fun ChatScreen(
     state: ChatState,
+    currentUserId: String?,
     onRefreshChannels: () -> Unit,
     onSelectChannel: (ChatChannel) -> Unit,
     onToggleUserSelection: (Boolean) -> Unit,
@@ -93,13 +95,6 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll to bottom when new messages arrive
-    val listState = rememberLazyListState()
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.size - 1)
-        }
-    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -167,6 +162,7 @@ fun ChatScreen(
                     messageInput = state.messageInput,
                     isSending = state.isSendingMessage,
                     isLoading = state.isLoading,
+                    currentUserId = currentUserId,
                     onUpdateMessageInput = onUpdateMessageInput,
                     onSendMessage = onSendMessage,
                     modifier = Modifier
@@ -327,11 +323,36 @@ private fun ConversationView(
     messageInput: String,
     isSending: Boolean,
     isLoading: Boolean,
+    currentUserId: String?,
     onUpdateMessageInput: (String) -> Unit,
     onSendMessage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val listState = rememberLazyListState()
+    
+    // Auto-scroll to bottom (last index) when new messages arrive
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            val lastIndex = messages.lastIndex
+            listState.animateScrollToItem(lastIndex)
+        }
+    }
+    
+    // Also scroll when message is sent
+    LaunchedEffect(isSending) {
+        if (!isSending && messages.isNotEmpty()) {
+            val lastIndex = messages.lastIndex
+            listState.animateScrollToItem(lastIndex)
+        }
+    }
+    
     Column(modifier = modifier.fillMaxSize()) {
+        // Conversation Header - Fixed at top
+        ConversationHeader(
+            channel = channel,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
         // Messages list
         if (isLoading && messages.isEmpty()) {
             Box(
@@ -342,13 +363,14 @@ private fun ConversationView(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                reverseLayout = false
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(messages, key = { it.id }) { message ->
-                    MessageBubble(message = message, isOwn = true) // TODO: Check if message is from current user
+                    val isOwn = currentUserId != null && message.user?.id == currentUserId
+                    MessageBubble(message = message, isOwn = isOwn)
                 }
             }
         }
@@ -431,6 +453,56 @@ private fun MessageBubble(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ConversationHeader(
+    channel: ChatChannel,
+    modifier: Modifier = Modifier
+) {
+    val displayName = channel.name ?: channel.otherMember?.name ?: "Chat"
+    val displayInitial = displayName.take(1).uppercase()
+    
+    Column(
+        modifier = modifier.background(Color.White)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Brand600),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = displayInitial,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = Gray900
+                )
+                Text(
+                    text = "Online",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Gray500
+                )
+            }
+        }
+        Divider(color = Gray400.copy(alpha = 0.3f))
     }
 }
 

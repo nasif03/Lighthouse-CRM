@@ -497,9 +497,11 @@ class MainActivity : ComponentActivity() {
                                     factory = ChatViewModelFactory(AppModule.getChatRepository(applicationContext))
                                 )
                                 val chatState by chatViewModel.state.collectAsStateWithLifecycle()
+                                val currentUserId = authState.user?.id
 
                                 ChatScreen(
                                     state = chatState,
+                                    currentUserId = currentUserId,
                                     onRefreshChannels = { chatViewModel.refreshChannels() },
                                     onSelectChannel = { chatViewModel.selectChannel(it) },
                                     onToggleUserSelection = { show -> chatViewModel.toggleUserSelection(show) },

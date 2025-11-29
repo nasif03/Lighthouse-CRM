@@ -209,9 +209,22 @@ def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50, of
         # Extract messages from response
         if isinstance(response, dict):
             messages = response.get("messages", [])
-            # Messages are typically returned in reverse chronological order (newest first)
-            # Reverse to get chronological order (oldest first)
-            return list(reversed(messages)) if messages else []
+            # Stream Chat returns messages in reverse chronological order (newest first)
+            # We need chronological order (oldest first) for proper display
+            # Sort by created_at timestamp to ensure proper ordering
+            if messages:
+                try:
+                    # Sort by created_at if available, otherwise reverse the list
+                    sorted_messages = sorted(
+                        messages,
+                        key=lambda m: m.get("created_at", "") if isinstance(m, dict) else "",
+                        reverse=False  # Oldest first
+                    )
+                    return sorted_messages
+                except Exception:
+                    # Fallback: just reverse if sorting fails
+                    return list(reversed(messages))
+            return []
         return []
     except TypeError as e:
         # If query() doesn't accept messages parameter, try alternative approach
@@ -231,8 +244,16 @@ def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50, of
                     # Apply limit
                     if len(messages) > limit:
                         messages = messages[:limit]
-                    # Reverse for chronological order
-                    return list(reversed(messages)) if messages else []
+                    # Sort for chronological order (oldest first)
+                    try:
+                        sorted_messages = sorted(
+                            messages,
+                            key=lambda m: m.get("created_at", "") if isinstance(m, dict) else "",
+                            reverse=False
+                        )
+                        return sorted_messages
+                    except Exception:
+                        return list(reversed(messages)) if messages else []
                 return []
             except TypeError:
                 # get_messages() doesn't accept limit parameter
@@ -245,8 +266,16 @@ def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50, of
                         messages = messages[offset:]
                     if len(messages) > limit:
                         messages = messages[:limit]
-                    # Reverse for chronological order
-                    return list(reversed(messages)) if messages else []
+                    # Sort for chronological order (oldest first)
+                    try:
+                        sorted_messages = sorted(
+                            messages,
+                            key=lambda m: m.get("created_at", "") if isinstance(m, dict) else "",
+                            reverse=False
+                        )
+                        return sorted_messages
+                    except Exception:
+                        return list(reversed(messages)) if messages else []
                 return []
         except Exception as e2:
             print(f"Alternative method failed: {e2}")
@@ -282,8 +311,16 @@ def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50, of
                     messages = messages[offset:]
                 if len(messages) > limit:
                     messages = messages[:limit]
-                # Reverse for chronological order
-                return list(reversed(messages)) if messages else []
+                # Sort for chronological order (oldest first)
+                try:
+                    sorted_messages = sorted(
+                        messages,
+                        key=lambda m: m.get("created_at", "") if isinstance(m, dict) else "",
+                        reverse=False
+                    )
+                    return sorted_messages
+                except Exception:
+                    return list(reversed(messages)) if messages else []
             return []
         except Exception as e2:
             print(f"Error in final fallback: {e2}")
