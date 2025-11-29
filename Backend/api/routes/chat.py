@@ -377,15 +377,25 @@ async def get_channels(
 async def get_messages(
     channel_type: str,
     channel_id: str,
+    limit: Optional[int] = 50,
+    offset: Optional[int] = 0,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get messages from a channel"""
+    """Get messages from a channel with pagination support"""
     try:
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found")
         
-        messages = get_channel_messages(channel_type, channel_id)
+        # Validate and set defaults
+        if limit is None or limit <= 0:
+            limit = 50
+        if limit > 100:  # Cap at 100 for performance
+            limit = 100
+        if offset is None or offset < 0:
+            offset = 0
+        
+        messages = get_channel_messages(channel_type, channel_id, limit=limit, offset=offset)
         
         # Format messages
         result = []
@@ -399,8 +409,12 @@ async def get_messages(
             })
         
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error getting messages: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
 
 @router.post("/messages")

@@ -3,17 +3,18 @@ package com.project.lighthouse.ui.administration
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.project.lighthouse.data.repository.EmployeesRepository
+import com.project.lighthouse.data.repository.OrganizationRepository
 import com.project.lighthouse.data.repository.RolesRepository
 
 class AdministrationViewModelFactory(
     private val employeesRepository: EmployeesRepository,
     private val rolesRepository: RolesRepository,
-    private val orgId: String
+    private val organizationRepository: OrganizationRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AdministrationViewModel::class.java)) {
-            return AdministrationViewModel(employeesRepository, rolesRepository, orgId) as T
+            return AdministrationViewModel(employeesRepository, rolesRepository, organizationRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

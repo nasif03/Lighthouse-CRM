@@ -186,12 +186,106 @@ def send_message(channel_type: str, channel_id: str, user_id: str, text: str) ->
     
     return response
 
-def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50) -> List[Dict]:
-    """Get messages from a channel"""
+def get_channel_messages(channel_type: str, channel_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
+    """Get messages from a channel with pagination support"""
     client = get_stream_client()
     
     channel = client.channel(channel_type, channel_id)
-    response = channel.get_messages(limit=limit)
     
-    return response.get("messages", [])
+    # Stream Chat SDK's channel.get_messages() method signature varies by version
+    # We'll use a try-except approach to handle different SDK versions
+    try:
+        # Try using query() method with message pagination
+        # This is the recommended way for pagination in Stream Chat
+        response = channel.query(
+            messages={
+                "limit": limit,
+                "offset": offset
+            },
+            watch=False,
+            state=True
+        )
+        
+        # Extract messages from response
+        if isinstance(response, dict):
+            messages = response.get("messages", [])
+            # Messages are typically returned in reverse chronological order (newest first)
+            # Reverse to get chronological order (oldest first)
+            return list(reversed(messages)) if messages else []
+        return []
+    except TypeError as e:
+        # If query() doesn't accept messages parameter, try alternative approach
+        print(f"Query with messages parameter failed: {e}, trying alternative method")
+        try:
+            # Alternative: Use query() to get channel state, then get messages separately
+            channel.query(watch=False, state=True)
+            # Now try to get messages with limit
+            # Some SDK versions support get_messages with limit parameter
+            try:
+                response = channel.get_messages(limit=limit + offset)
+                if isinstance(response, dict):
+                    messages = response.get("messages", [])
+                    # Apply offset manually
+                    if offset > 0 and len(messages) > offset:
+                        messages = messages[offset:]
+                    # Apply limit
+                    if len(messages) > limit:
+                        messages = messages[:limit]
+                    # Reverse for chronological order
+                    return list(reversed(messages)) if messages else []
+                return []
+            except TypeError:
+                # get_messages() doesn't accept limit parameter
+                # Get all messages and apply pagination manually
+                response = channel.get_messages()
+                if isinstance(response, dict):
+                    messages = response.get("messages", [])
+                    # Apply offset and limit manually
+                    if offset > 0 and len(messages) > offset:
+                        messages = messages[offset:]
+                    if len(messages) > limit:
+                        messages = messages[:limit]
+                    # Reverse for chronological order
+                    return list(reversed(messages)) if messages else []
+                return []
+        except Exception as e2:
+            print(f"Alternative method failed: {e2}")
+            # Final fallback: get all messages and paginate manually
+            try:
+                response = channel.get_messages()
+                if isinstance(response, dict):
+                    messages = response.get("messages", [])
+                    # Apply offset and limit manually
+                    if offset > 0 and len(messages) > offset:
+                        messages = messages[offset:]
+                    if len(messages) > limit:
+                        messages = messages[:limit]
+                    # Reverse for chronological order
+                    return list(reversed(messages)) if messages else []
+                return []
+            except Exception as e3:
+                print(f"Final fallback failed: {e3}")
+                import traceback
+                traceback.print_exc()
+                return []
+    except Exception as e:
+        print(f"Error querying channel messages: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback: try basic get_messages
+        try:
+            response = channel.get_messages()
+            if isinstance(response, dict):
+                messages = response.get("messages", [])
+                # Apply offset and limit manually
+                if offset > 0 and len(messages) > offset:
+                    messages = messages[offset:]
+                if len(messages) > limit:
+                    messages = messages[:limit]
+                # Reverse for chronological order
+                return list(reversed(messages)) if messages else []
+            return []
+        except Exception as e2:
+            print(f"Error in final fallback: {e2}")
+            return []
 

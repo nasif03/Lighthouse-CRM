@@ -1,5 +1,6 @@
 package com.project.lighthouse.ui.administration
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +56,7 @@ import com.project.lighthouse.ui.theme.Gray900
 @Composable
 fun AdministrationScreen(
     state: AdministrationState,
+    onSelectOrganization: (String) -> Unit,
     onUpdateNewEmployeeName: (String) -> Unit,
     onUpdateNewEmployeeEmail: (String) -> Unit,
     onToggleRoleSelection: (String) -> Unit,
@@ -93,43 +95,163 @@ fun AdministrationScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Employees Section
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                EmployeesSection(
-                    state = state,
-                    onUpdateNewEmployeeName = onUpdateNewEmployeeName,
-                    onUpdateNewEmployeeEmail = onUpdateNewEmployeeEmail,
-                    onToggleRoleSelection = onToggleRoleSelection,
-                    onAddEmployee = onAddEmployee,
-                    onStartEditingEmployee = onStartEditingEmployee,
-                    onCancelEditingEmployee = onCancelEditingEmployee,
-                    onToggleEditingRoleSelection = onToggleEditingRoleSelection,
-                    onUpdateEmployeeRoles = onUpdateEmployeeRoles
-                )
+        when {
+            state.isLoadingOrganizations -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Loading organizations...", color = Gray500)
+                }
             }
-
-            // Roles Section
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                RolesSection(
-                    state = state,
-                    onUpdateNewRoleName = onUpdateNewRoleName,
-                    onTogglePermission = onTogglePermission,
-                    onAddRole = onAddRole,
-                    onDeleteRole = { showDeleteConfirm = it }
-                )
+            state.selectedOrgId == null -> {
+                // Organization selection
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (state.organizations.isEmpty()) {
+                        Text(
+                            text = "No organizations found. Please create or join an organization first.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "Select an organization to manage",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Gray900,
+                            modifier = Modifier.padding(bottom = 24.dp)
+                        )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(state.organizations) { org ->
+                                WebStyleCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onSelectOrganization(org.id) }
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            text = org.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Gray900
+                                        )
+                                        org.domain?.takeIf { it.isNotBlank() }?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Gray500,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                // Main content with employees and roles
+                when (state.uiState) {
+                    is AdministrationUiState.Loading -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Loading employees and roles...", color = Gray500)
+                        }
+                    }
+                    is AdministrationUiState.Error -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = state.uiState.message,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                    is AdministrationUiState.Empty -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "No employees or roles found. Start by adding employees and creating roles.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Gray500,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                    is AdministrationUiState.Success -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Employees Section
+                            item {
+                                EmployeesSection(
+                                    state = state,
+                                    onUpdateNewEmployeeName = onUpdateNewEmployeeName,
+                                    onUpdateNewEmployeeEmail = onUpdateNewEmployeeEmail,
+                                    onToggleRoleSelection = onToggleRoleSelection,
+                                    onAddEmployee = onAddEmployee,
+                                    onStartEditingEmployee = onStartEditingEmployee,
+                                    onCancelEditingEmployee = onCancelEditingEmployee,
+                                    onToggleEditingRoleSelection = onToggleEditingRoleSelection,
+                                    onUpdateEmployeeRoles = onUpdateEmployeeRoles
+                                )
+                            }
+                            
+                            // Roles Section
+                            item {
+                                RolesSection(
+                                    state = state,
+                                    onUpdateNewRoleName = onUpdateNewRoleName,
+                                    onTogglePermission = onTogglePermission,
+                                    onAddRole = onAddRole,
+                                    onDeleteRole = { showDeleteConfirm = it }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -257,22 +379,13 @@ private fun EmployeesSection(
                 color = Gray700,
                 fontSize = 14.sp
             )
-            if (state.isLoadingEmployees) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-                    Text("Loading employees...", fontSize = 12.sp, color = Gray500)
-                }
-            } else if (state.employees.isEmpty()) {
+            if (state.employees.isEmpty()) {
                 Text("No employees found.", fontSize = 12.sp, color = Gray500)
             } else {
-                LazyColumn(
-                    modifier = Modifier.height(300.dp),
+                Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(state.employees) { employee ->
+                    state.employees.forEach { employee ->
                         EmployeeItem(
                             employee = employee,
                             roles = state.roles,
@@ -474,22 +587,13 @@ private fun RolesSection(
                 color = Gray700,
                 fontSize = 14.sp
             )
-            if (state.isLoadingRoles) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-                    Text("Loading roles...", fontSize = 12.sp, color = Gray500)
-                }
-            } else if (state.roles.isEmpty()) {
+            if (state.roles.isEmpty()) {
                 Text("No roles found. Create one above.", fontSize = 12.sp, color = Gray500)
             } else {
-                LazyColumn(
-                    modifier = Modifier.height(300.dp),
+                Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(state.roles) { role ->
+                    state.roles.forEach { role ->
                         RoleItem(role = role, onDelete = { onDeleteRole(role.id) })
                     }
                 }

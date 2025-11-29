@@ -554,46 +554,32 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(MainDestination.Administration.route) {
-                                val orgId = authState.user?.orgId as? String
-                                if (orgId != null) {
-                                    val administrationViewModel = viewModel<AdministrationViewModel>(
-                                        factory = AdministrationViewModelFactory(
-                                            AppModule.getEmployeesRepository(applicationContext),
-                                            AppModule.getRolesRepository(applicationContext),
-                                            orgId
-                                        )
+                                val administrationViewModel = viewModel<AdministrationViewModel>(
+                                    factory = AdministrationViewModelFactory(
+                                        AppModule.getEmployeesRepository(applicationContext),
+                                        AppModule.getRolesRepository(applicationContext),
+                                        AppModule.getOrganizationRepository(applicationContext)
                                     )
-                                    val administrationState by administrationViewModel.state.collectAsStateWithLifecycle()
+                                )
+                                val administrationState by administrationViewModel.state.collectAsStateWithLifecycle()
 
-                                    AdministrationScreen(
-                                        state = administrationState,
-                                        onUpdateNewEmployeeName = { administrationViewModel.updateNewEmployeeName(it) },
-                                        onUpdateNewEmployeeEmail = { administrationViewModel.updateNewEmployeeEmail(it) },
-                                        onToggleRoleSelection = { administrationViewModel.toggleRoleSelection(it) },
-                                        onAddEmployee = { administrationViewModel.addEmployee() },
-                                        onStartEditingEmployee = { administrationViewModel.startEditingEmployee(it) },
-                                        onCancelEditingEmployee = { administrationViewModel.cancelEditingEmployee() },
-                                        onToggleEditingRoleSelection = { administrationViewModel.toggleEditingRoleSelection(it) },
-                                        onUpdateEmployeeRoles = { administrationViewModel.updateEmployeeRoles() },
-                                        onUpdateNewRoleName = { administrationViewModel.updateNewRoleName(it) },
-                                        onTogglePermission = { administrationViewModel.togglePermission(it) },
-                                        onAddRole = { administrationViewModel.addRole() },
-                                        onDeleteRole = { administrationViewModel.deleteRole(it) },
-                                        onDismissMessage = { administrationViewModel.dismissMessage() }
-                                    )
-                                } else {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = "Please select an organization to manage employees and roles.",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
+                                AdministrationScreen(
+                                    state = administrationState,
+                                    onSelectOrganization = { administrationViewModel.selectOrganization(it) },
+                                    onUpdateNewEmployeeName = { administrationViewModel.updateNewEmployeeName(it) },
+                                    onUpdateNewEmployeeEmail = { administrationViewModel.updateNewEmployeeEmail(it) },
+                                    onToggleRoleSelection = { administrationViewModel.toggleRoleSelection(it) },
+                                    onAddEmployee = { administrationViewModel.addEmployee() },
+                                    onStartEditingEmployee = { administrationViewModel.startEditingEmployee(it) },
+                                    onCancelEditingEmployee = { administrationViewModel.cancelEditingEmployee() },
+                                    onToggleEditingRoleSelection = { administrationViewModel.toggleEditingRoleSelection(it) },
+                                    onUpdateEmployeeRoles = { administrationViewModel.updateEmployeeRoles() },
+                                    onUpdateNewRoleName = { administrationViewModel.updateNewRoleName(it) },
+                                    onTogglePermission = { administrationViewModel.togglePermission(it) },
+                                    onAddRole = { administrationViewModel.addRole() },
+                                    onDeleteRole = { administrationViewModel.deleteRole(it) },
+                                    onDismissMessage = { administrationViewModel.dismissMessage() }
+                                )
                             }
 
                             composable(MainDestination.Tickets.route) {

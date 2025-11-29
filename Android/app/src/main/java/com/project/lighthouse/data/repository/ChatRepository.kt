@@ -125,10 +125,15 @@ class ChatRepository {
         }
     }
 
-    suspend fun getMessages(channelType: String, channelId: String, limit: Int = 50): Result<List<ChatMessage>> = withContext(Dispatchers.IO) {
+    suspend fun getMessages(
+        channelType: String, 
+        channelId: String, 
+        limit: Int = 50, 
+        offset: Int = 0
+    ): Result<List<ChatMessage>> = withContext(Dispatchers.IO) {
         try {
-            Log.d("ChatRepository", "Getting messages for channel: $channelType/$channelId")
-            val response = api.getMessages(channelType, channelId, limit)
+            Log.d("ChatRepository", "Getting messages for channel: $channelType/$channelId (limit=$limit, offset=$offset)")
+            val response = api.getMessages(channelType, channelId, limit, offset)
             if (response.isSuccessful && response.body() != null) {
                 val messages = response.body()!!
                 Log.d("ChatRepository", "Retrieved ${messages.size} messages")
