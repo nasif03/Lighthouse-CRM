@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -79,7 +83,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TicketDetailScreen(
     state: TicketDetailState,
@@ -101,6 +105,10 @@ fun TicketDetailScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.isLoading,
+        onRefresh = onRefresh
+    )
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let {
@@ -131,93 +139,105 @@ fun TicketDetailScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        if (state.isLoading && state.ticket == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
-                    Text(
-                        text = "Loading ticket...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .pullRefresh(pullRefreshState)
+        ) {
+            when {
+                state.isLoading && state.ticket == null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
+                            Text(
+                                text = "Loading ticket...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                state.ticket != null -> {
+                    // Use single scrollable column for mobile-friendly layout
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Ticket Header
+                        item {
+                            TicketHeaderCard(
+                                ticket = state.ticket,
+                                isAdmin = state.isAdmin,
+                                onStatusClick = { onToggleStatusModal(true) },
+                                onAssignClick = { onToggleAssignModal(true) }
+                            )
+                        }
+
+                        // Description
+                        item {
+                            TicketDescriptionCard(ticket = state.ticket)
+                        }
+
+                        // Customer Info
+                        item {
+                            CustomerInfoCard(ticket = state.ticket)
+                        }
+
+                        // Assignment
+                        item {
+                            AssignmentCard(
+                                ticket = state.ticket,
+                                isAdmin = state.isAdmin,
+                                onAssignClick = { onToggleAssignModal(true) }
+                            )
+                        }
+
+                        // Priority
+                        item {
+                            PriorityCard(
+                                ticket = state.ticket,
+                                selectedPriority = state.selectedPriority,
+                                onPriorityChange = onUpdatePriority
+                            )
+                        }
+
+                        // Jira Integration
+                        item {
+                            JiraIntegrationCard(
+                                ticket = state.ticket,
+                                isCreating = state.isCreatingJiraIssue,
+                                onCreateJiraIssue = onCreateJiraIssue
+                            )
+                        }
+
+                        // Comments
+                        item {
+                            TicketCommentsCard(
+                                comments = state.comments,
+                                newComment = state.newComment,
+                                isInternalNote = state.isInternalNote,
+                                onUpdateComment = onUpdateNewComment,
+                                onToggleInternalNote = onToggleInternalNote,
+                                onAddComment = { onAddComment(state.newComment, state.isInternalNote) }
+                            )
+                        }
+                    }
                 }
             }
-        } else if (state.ticket != null) {
-            // Use single scrollable column for mobile-friendly layout
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Ticket Header
-                item {
-                    TicketHeaderCard(
-                        ticket = state.ticket,
-                        isAdmin = state.isAdmin,
-                        onStatusClick = { onToggleStatusModal(true) },
-                        onAssignClick = { onToggleAssignModal(true) }
-                    )
-                }
 
-                // Description
-                item {
-                    TicketDescriptionCard(ticket = state.ticket)
-                }
-
-                // Customer Info
-                item {
-                    CustomerInfoCard(ticket = state.ticket)
-                }
-
-                // Assignment
-                item {
-                    AssignmentCard(
-                        ticket = state.ticket,
-                        isAdmin = state.isAdmin,
-                        onAssignClick = { onToggleAssignModal(true) }
-                    )
-                }
-
-                // Priority
-                item {
-                    PriorityCard(
-                        ticket = state.ticket,
-                        selectedPriority = state.selectedPriority,
-                        onPriorityChange = onUpdatePriority
-                    )
-                }
-
-                // Jira Integration
-                item {
-                    JiraIntegrationCard(
-                        ticket = state.ticket,
-                        isCreating = state.isCreatingJiraIssue,
-                        onCreateJiraIssue = onCreateJiraIssue
-                    )
-                }
-
-                // Comments
-                item {
-                    TicketCommentsCard(
-                        comments = state.comments,
-                        newComment = state.newComment,
-                        isInternalNote = state.isInternalNote,
-                        onUpdateComment = onUpdateNewComment,
-                        onToggleInternalNote = onToggleInternalNote,
-                        onAddComment = { onAddComment(state.newComment, state.isInternalNote) }
-                    )
-                }
-            }
+            PullRefreshIndicator(
+                refreshing = state.isLoading,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 

@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -71,7 +75,7 @@ import com.project.lighthouse.ui.theme.Yellow600
 private val ticketStatuses = listOf("open", "in_progress", "resolved", "closed")
 private val ticketPriorities = listOf("low", "medium", "high", "urgent")
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TicketsScreen(
     state: TicketsState,
@@ -95,6 +99,10 @@ fun TicketsScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.isRefreshing,
+        onRefresh = onRefresh
+    )
 
     LaunchedEffect(state.errorMessage, state.infoMessage) {
         state.errorMessage?.let {
@@ -134,127 +142,140 @@ fun TicketsScreen(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
-        if (state.isLoading && state.tickets.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
-                Text(
-                    text = "Loading tickets...",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else if (state.tickets.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "No tickets yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Text(
-                    text = "Create your first ticket to get started",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            // Calculate stats
-            val stats = com.project.lighthouse.ui.tickets.calculateStats(state.tickets)
-            
-            // Filter tickets
-            val filteredTickets = com.project.lighthouse.ui.tickets.filterTickets(
-                tickets = state.tickets,
-                searchQuery = state.searchQuery,
-                statusFilter = state.filterStatus,
-                priorityFilter = state.filterPriority
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .pullRefresh(pullRefreshState)
+        ) {
+            when {
+                state.isLoading && state.tickets.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.padding(bottom = 16.dp))
+                        Text(
+                            text = "Loading tickets...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                state.tickets.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "No tickets yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "Create your first ticket to get started",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                else -> {
+                    // Calculate stats
+                    val stats = com.project.lighthouse.ui.tickets.calculateStats(state.tickets)
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Stats Dashboard (clickable to filter)
-                item {
-                    com.project.lighthouse.ui.tickets.TicketStatsDashboard(
-                        stats = stats,
-                        currentFilterStatus = state.filterStatus,
-                        onStatusClick = { status -> onSetFilter(status, state.filterPriority) }
+                    // Filter tickets
+                    val filteredTickets = com.project.lighthouse.ui.tickets.filterTickets(
+                        tickets = state.tickets,
+                        searchQuery = state.searchQuery,
+                        statusFilter = state.filterStatus,
+                        priorityFilter = state.filterPriority
                     )
-                }
-                
-                // Search and Filters
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = state.searchQuery,
-                            onValueChange = onSetSearchQuery,
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Search by ticket ID, subject, customer name, or email...") },
-                            singleLine = true
-                        )
-                        TicketFilters(
-                            currentStatus = state.filterStatus,
-                            currentPriority = state.filterPriority,
-                            onSetFilter = onSetFilter
-                        )
-                    }
-                }
 
-                // Bulk actions bar (shown when tickets are selected and user is admin)
-                if (state.isAdmin && state.selectedTicketIds.isNotEmpty()) {
-                    item {
-                        BulkActionsBar(
-                            selectedCount = state.selectedTicketIds.size,
-                            assignableEmployees = state.assignableEmployees,
-                            isProcessing = state.isBulkActionInProgress,
-                            onBulkAssign = onBulkAssign,
-                            onBulkClose = onBulkClose,
-                            onClearSelection = onClearSelection
-                        )
-                    }
-                }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Stats Dashboard (clickable to filter)
+                        item {
+                            com.project.lighthouse.ui.tickets.TicketStatsDashboard(
+                                stats = stats,
+                                currentFilterStatus = state.filterStatus,
+                                onStatusClick = { status -> onSetFilter(status, state.filterPriority) }
+                            )
+                        }
 
-                // Use a stable, unique key per ticket to avoid LazyColumn key collisions.
-                // Backend guarantees ticketNumber uniqueness, so prefer that over id.
-                items(filteredTickets, key = { it.ticketNumber }) { ticket ->
-                    TicketCard(
-                        ticket = ticket,
-                        isAdmin = state.isAdmin,
-                        assignableEmployees = state.assignableEmployees,
-                        isSelected = state.selectedTicketIds.contains(ticket.id),
-                        onUpdate = { status, priority, assignedTo, category ->
-                            onUpdateTicket(ticket.id, status, priority, assignedTo, category)
-                        },
-                        onOpenJira = { url ->
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Log.e("TicketsScreen", "Failed to open Jira URL", e)
+                        // Search and Filters
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = state.searchQuery,
+                                    onValueChange = onSetSearchQuery,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Search by ticket ID, subject, customer name, or email...") },
+                                    singleLine = true
+                                )
+                                TicketFilters(
+                                    currentStatus = state.filterStatus,
+                                    currentPriority = state.filterPriority,
+                                    onSetFilter = onSetFilter
+                                )
                             }
-                        },
-                        onToggleUpdateDialog = { onToggleUpdateDialog(true, ticket) },
-                        onViewDetails = { onViewDetails(ticket.id) },
-                        onToggleSelection = if (state.isAdmin) { { onToggleSelection(ticket.id) } } else null
-                    )
+                        }
+
+                        // Bulk actions bar (shown when tickets are selected and user is admin)
+                        if (state.isAdmin && state.selectedTicketIds.isNotEmpty()) {
+                            item {
+                                BulkActionsBar(
+                                    selectedCount = state.selectedTicketIds.size,
+                                    assignableEmployees = state.assignableEmployees,
+                                    isProcessing = state.isBulkActionInProgress,
+                                    onBulkAssign = onBulkAssign,
+                                    onBulkClose = onBulkClose,
+                                    onClearSelection = onClearSelection
+                                )
+                            }
+                        }
+
+                        // Use a stable, unique key per ticket to avoid LazyColumn key collisions.
+                        // Backend guarantees ticketNumber uniqueness, so prefer that over id.
+                        items(filteredTickets, key = { it.ticketNumber }) { ticket ->
+                            TicketCard(
+                                ticket = ticket,
+                                isAdmin = state.isAdmin,
+                                assignableEmployees = state.assignableEmployees,
+                                isSelected = state.selectedTicketIds.contains(ticket.id),
+                                onUpdate = { status, priority, assignedTo, category ->
+                                    onUpdateTicket(ticket.id, status, priority, assignedTo, category)
+                                },
+                                onOpenJira = { url ->
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Log.e("TicketsScreen", "Failed to open Jira URL", e)
+                                    }
+                                },
+                                onToggleUpdateDialog = { onToggleUpdateDialog(true, ticket) },
+                                onViewDetails = { onViewDetails(ticket.id) },
+                                onToggleSelection = if (state.isAdmin) { { onToggleSelection(ticket.id) } } else null
+                            )
+                        }
+                    }
                 }
             }
+
+            PullRefreshIndicator(
+                refreshing = state.isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 

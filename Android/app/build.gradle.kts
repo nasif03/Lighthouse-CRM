@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material:material")
     implementation(libs.play.services.auth)
     implementation(libs.androidx.navigation.compose)
     testImplementation(libs.junit)

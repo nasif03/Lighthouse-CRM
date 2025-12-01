@@ -137,12 +137,30 @@ export default function Support() {
 
   const handleAssignTicket = async (ticketId: string, employeeId: string | null) => {
     if (!token) return;
+
+    // Optimistically update UI so the name changes immediately
+    const previousTickets = tickets;
+    const employeeName = employeeId ? employees.find(e => e.id === employeeId)?.name || 'Assigned' : null;
+    setTickets(prev =>
+      prev.map(ticket =>
+        ticket.id === ticketId
+          ? {
+              ...ticket,
+              assignedTo: employeeId,
+              assignedToName: employeeId ? employeeName : null,
+            }
+          : ticket
+      )
+    );
+
     try {
       await apiPut(`/api/tickets/${ticketId}`, token, {
         assignedTo: employeeId,
       });
       await fetchTickets();
     } catch (err: any) {
+      // Revert optimistic update on failure
+      setTickets(previousTickets);
       alert(err.message || 'Failed to assign ticket');
     }
   };
