@@ -91,36 +91,58 @@ export function CustomMessageInput() {
     }
   };
 
+  const remainingChars = VALIDATION_LIMITS.CHAT_MESSAGE - inputValue.length;
+  const isNearLimit = remainingChars < 100;
+
   return (
     <div 
       className="chat-input flex-shrink-0 border-t border-gray-200 bg-white"
       style={{
         padding: '12px 16px',
         display: 'flex',
+        flexDirection: 'column',
         gap: '8px'
       }}
     >
-      <Input
-        placeholder="Type a message..."
-        value={inputValue}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value.length <= VALIDATION_LIMITS.CHAT_MESSAGE) {
-            setInputValue(value);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-          }
-        }}
-        className="flex-1"
-        maxLength={VALIDATION_LIMITS.CHAT_MESSAGE}
-      />
-      <Button onClick={handleSend} disabled={!inputValue.trim()}>
-        Send
-      </Button>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <Input
+          placeholder="Type a message..."
+          value={inputValue}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value.length <= VALIDATION_LIMITS.CHAT_MESSAGE) {
+              setInputValue(value);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          className="flex-1"
+          maxLength={VALIDATION_LIMITS.CHAT_MESSAGE}
+        />
+        <Button onClick={handleSend} disabled={!inputValue.trim()}>
+          Send
+        </Button>
+      </div>
+      {inputValue.length > 0 && (
+        <div className="flex justify-end">
+          <span 
+            className={`text-xs ${
+              remainingChars < 0 
+                ? 'text-red-600 font-semibold' 
+                : isNearLimit 
+                ? 'text-yellow-600' 
+                : 'text-gray-400'
+            }`}
+          >
+            {inputValue.length}/{VALIDATION_LIMITS.CHAT_MESSAGE} characters
+            {remainingChars < 0 && ' (over limit)'}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
