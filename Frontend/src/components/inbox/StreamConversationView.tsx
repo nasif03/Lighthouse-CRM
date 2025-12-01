@@ -49,8 +49,13 @@ function CustomMessageList() {
 
   // Auto-scroll to bottom on new messages (unless user is scrolling)
   useEffect(() => {
-    if (!isUserScrolling && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (!isUserScrolling && messagesEndRef.current && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      // Only auto-scroll if user is near the bottom (within 100px)
+      const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+      if (isNearBottom) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     }
   }, [sortedMessages.length, isUserScrolling]);
 
@@ -70,14 +75,22 @@ function CustomMessageList() {
       // Check if user scrolled to bottom
       const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
       
-      // Reset scrolling flag after 2 seconds of no scrolling
-      scrollTimeoutRef.current = setTimeout(() => {
-        setIsUserScrolling(false);
-      }, 2000);
-      
-      // If user scrolled to bottom, allow auto-scroll
+      // If user scrolled to bottom, allow auto-scroll immediately
       if (isAtBottom) {
         setIsUserScrolling(false);
+        // Clear timeout since we're at bottom
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+      } else {
+        // User is scrolling up - prevent auto-scroll
+        // Reset scrolling flag after 3 seconds of no scrolling
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        scrollTimeoutRef.current = setTimeout(() => {
+          setIsUserScrolling(false);
+        }, 3000);
       }
     };
 
@@ -99,9 +112,10 @@ function CustomMessageList() {
         padding: '10px',
         overflowY: 'auto',
         overflowX: 'hidden',
-        position: 'static',
+        position: 'relative',
         minHeight: 0,
-        maxHeight: '100%'
+        height: '100%',
+        width: '100%'
       }}
     >
       {sortedMessages.map((message: any) => (

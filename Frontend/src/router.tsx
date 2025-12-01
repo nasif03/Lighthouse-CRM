@@ -21,6 +21,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ErrorPage from './components/ErrorPage';
 import Accounts from './pages/Accounts';
 import Calendar from './pages/Calendar';
+import Inbox from './pages/Inbox';
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
           { path: 'deals', element: <Deals /> },
           { path: 'accounts', element: <Accounts /> },
           { path: 'calendar', element: <Calendar /> },
+          { path: 'inbox', element: <Inbox /> },
           { path: 'campaigns', element: <Campaigns /> },
           { path: 'segments', element: <Segments /> },
           { path: 'templates', element: <Templates /> },

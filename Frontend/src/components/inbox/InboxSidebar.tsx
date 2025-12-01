@@ -98,7 +98,7 @@ export default function InboxSidebar() {
 
   return (
     <>
-      <div className="w-full flex flex-col">
+      <div className="w-full h-full flex flex-col min-h-0">
         {/* New Conversation Button */}
         <div className="px-4 py-3 flex-shrink-0">
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -115,7 +115,7 @@ export default function InboxSidebar() {
           </button>
         </div>
         {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1 min-h-0" style={{ maxHeight: '400px' }}>
+        <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1 min-h-0">
           {isLoading ? (
             <div className="text-center text-gray-500 py-4 text-sm">Loading conversations...</div>
           ) : conversations.length === 0 ? (

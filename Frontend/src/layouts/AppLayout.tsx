@@ -3,8 +3,7 @@ import { useAuthStore } from '../store/authStore';
 // import { TenantSwitcher } from '../components/TenantSwitcher';
 import { clsx } from 'clsx';
 import Button from '../components/ui/Button';
-import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies, IconAssistant, IconAccounts, IconCalendar } from '../components/icons';
-import InboxPanel from '../components/inbox/InboxPanel';
+import { IconAnalytics, IconCampaigns, IconContacts, IconDashboard, IconLeads, IconSegments, IconSettings, IconTemplates, IconDeals, IconSupport, IconAdmin, IconFireflies, IconAssistant, IconAccounts, IconCalendar, IconInbox } from '../components/icons';
 import GmailPanel from '../components/gmail/GmailPanel';
 
 // Navigation sections for business owner organization
@@ -23,6 +22,7 @@ const navSections = [
       { to: '/accounts', label: 'Accounts', icon: IconAccounts },
       { to: '/deals', label: 'Deals', icon: IconDeals },
       { to: '/calendar', label: 'Calendar', icon: IconCalendar },
+      { to: '/inbox', label: 'Inbox', icon: IconInbox },
     ]
   },
   // {
@@ -129,14 +129,9 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Inbox Panel and Gmail Panel on the right - integrated into main background */}
+      {/* Gmail Panel on the right - only show Gmail, no inbox panel */}
       <div className="col-start-3 row-span-2 h-full bg-white border-l border-gray-200 flex flex-col min-h-0">
-        <div className="flex-1 border-b border-gray-200 min-h-0">
-          <InboxPanel />
-        </div>
-        <div className="flex-1 min-h-0 flex flex-col">
-          <GmailPanel />
-        </div>
+        <GmailPanel />
       </div>
     </div>
   );
