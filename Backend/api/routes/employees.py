@@ -5,17 +5,10 @@ from datetime import datetime
 from models.employee import EmployeeResponse, CreateEmployeeRequest, UpdateEmployeeRequest
 from api.dependencies import get_current_user
 from config.database import users_collection, organizations_collection, roles_collection
+from utils.permissions import is_org_admin
+from services.user_cache import clear_user_cache
 
 router = APIRouter(prefix="/api/organizations/{org_id}/employees", tags=["employees"])
-
-def is_org_admin(user_doc: dict, org_id: str) -> bool:
-    """Check if user is admin of the organization"""
-    user_id = str(user_doc["_id"])
-    org = organizations_collection.find_one({"_id": ObjectId(org_id)})
-    if not org:
-        return False
-    admins = org.get("admins", [])
-    return user_id in admins
 
 @router.get("", response_model=list[EmployeeResponse])
 async def get_employees(
@@ -151,7 +144,10 @@ async def create_employee(
         
         # Fetch updated user
         updated_user = users_collection.find_one({"_id": ObjectId(user_id)})
-        
+
+        # Invalidate auth cache so updated roles/org membership take effect immediately
+        clear_user_cache()
+
         return EmployeeResponse(
             id=user_id,
             name=updated_user.get("name", ""),
@@ -215,7 +211,10 @@ async def update_employee(
             {"_id": ObjectId(employee_id)},
             {"$set": update_data}
         )
-        
+
+        # Invalidate auth cache so updated roles/names take effect immediately
+        clear_user_cache()
+
         updated_employee = users_collection.find_one({"_id": ObjectId(employee_id)})
         org = organizations_collection.find_one({"_id": ObjectId(org_id)})
         

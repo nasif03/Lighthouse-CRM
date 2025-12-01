@@ -66,7 +66,7 @@ def get_jsm_account_id_from_user_id(user_id: Optional[str]) -> Optional[str]:
         return None
 
 def has_ticket_role(user_doc: dict, org_id: str) -> bool:
-    """Check if user has ticket-related role (read:tickets or write:tickets permission)"""
+    """Check if user has ticket-related role (read:tickets, write:tickets, or admin:tickets permission)"""
     # Import here to avoid circular dependency
     from utils.permissions import is_super_admin
     
@@ -107,6 +107,21 @@ def has_ticket_role(user_doc: dict, org_id: str) -> bool:
             return True
     
     return False
+
+
+def has_ticket_admin_permission(user_doc: dict, org_id: str) -> bool:
+    """
+    Check if user has admin-level ticket permission.
+
+    This uses the shared permission utility so that either:
+    - Org admins
+    - Super admins
+    - Or users with a role containing 'admin:tickets'
+    are all treated as ticket administrators.
+    """
+    from utils.permissions import has_permission
+
+    return has_permission(user_doc, org_id, ["admin:tickets"])
 
 @router.get("", response_model=list[TicketResponse])
 async def get_tickets(
@@ -280,7 +295,8 @@ async def check_admin(
         org_id = user_ids["orgId"]
         
         from api.routes.organizations import is_org_admin
-        user_is_admin = is_org_admin(user_doc, org_id)
+        # Treat either org admins or users with 'admin:tickets' as ticket administrators
+        user_is_admin = is_org_admin(user_doc, org_id) or has_ticket_admin_permission(user_doc, org_id)
         
         return {"isAdmin": user_is_admin}
     except HTTPException:
@@ -491,9 +507,10 @@ async def update_ticket(
         
         project_key = org.get("jiraProjectKey")
         
-        # Check if user is admin (only admins can assign tickets)
+        # Check if user is ticket admin (only admins can assign tickets)
+        # Ticket admins are either org admins or users with 'admin:tickets' permission.
         from api.routes.organizations import is_org_admin
-        user_is_admin = is_org_admin(user_doc, org_id)
+        user_is_admin = is_org_admin(user_doc, org_id) or has_ticket_admin_permission(user_doc, org_id)
         user_id = str(user_doc["_id"])
         
         # Fetch ticket from JSM
@@ -516,8 +533,12 @@ async def update_ticket(
         #             detail="You can only update tickets assigned to you."
         #         )
         
-        # Only admins can assign tickets
-        if request.assignedTo is not None and not user_is_admin:
+        # Only ticket admins or users with write:tickets permission can assign tickets.
+        # This allows agents with write:tickets to assign while still respecting ticket admins.
+        from utils.permissions import has_permission
+        can_assign = user_is_admin or has_permission(user_doc, org_id, ["write:tickets", "admin:tickets"])
+
+        if request.assignedTo is not None and not can_assign:
             raise HTTPException(
                 status_code=403,
                 detail="Only administrators can assign or reassign tickets."

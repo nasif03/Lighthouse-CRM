@@ -22,8 +22,9 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        # Build filter for user's data
-        query_filter = build_user_filter(user_doc, include_owner=True)
+        # Build filter for organization-wide data (no owner filter)
+        # so all users in the org see the same dashboard numbers.
+        query_filter = build_user_filter(user_doc, include_owner=False)
         org_id = user_doc.get("orgId")
         
         if not org_id:
@@ -129,7 +130,8 @@ async def get_recent_items(current_user: dict = Depends(get_current_user)):
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
         
-        query_filter = build_user_filter(user_doc, include_owner=True)
+        # Organization-wide recent items (no owner filter)
+        query_filter = build_user_filter(user_doc, include_owner=False)
         
         # Get recent leads (last 5)
         recent_leads = list(leads_collection.find(

@@ -5,17 +5,10 @@ from datetime import datetime
 from models.role import RoleResponse, CreateRoleRequest, UpdateRoleRequest
 from api.dependencies import get_current_user
 from config.database import roles_collection, organizations_collection
+from utils.permissions import is_org_admin
+from services.user_cache import clear_user_cache
 
 router = APIRouter(prefix="/api/organizations/{org_id}/roles", tags=["roles"])
-
-def is_org_admin(user_doc: dict, org_id: str) -> bool:
-    """Check if user is admin of the organization"""
-    user_id = str(user_doc["_id"])
-    org = organizations_collection.find_one({"_id": ObjectId(org_id)})
-    if not org:
-        return False
-    admins = org.get("admins", [])
-    return user_id in admins
 
 @router.get("", response_model=list[RoleResponse])
 async def get_roles(
@@ -96,7 +89,10 @@ async def create_role(
         
         result = roles_collection.insert_one(role_data)
         role_id = str(result.inserted_id)
-        
+
+        # Invalidate auth cache so new role permissions are reflected immediately
+        clear_user_cache()
+
         return RoleResponse(
             id=role_id,
             name=request.name,
@@ -153,7 +149,10 @@ async def update_role(
             {"_id": ObjectId(role_id)},
             {"$set": update_data}
         )
-        
+
+        # Invalidate auth cache so updated role permissions are reflected immediately
+        clear_user_cache()
+
         updated_role = roles_collection.find_one({"_id": ObjectId(role_id)})
         
         return RoleResponse(
@@ -191,7 +190,10 @@ async def delete_role(
             raise HTTPException(status_code=404, detail="Role not found")
         
         roles_collection.delete_one({"_id": ObjectId(role_id)})
-        
+
+        # Invalidate auth cache so removed role permissions are reflected immediately
+        clear_user_cache()
+
         return {"message": "Role deleted successfully"}
     except HTTPException:
         raise

@@ -10,6 +10,7 @@ from services.google_calendar import (
     create_calendar_event,
     list_calendar_events,
 )
+from config.settings import FIREFLIES_BOT_EMAIL
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -44,13 +45,24 @@ def create_meeting(
     if not user_email:
         raise HTTPException(status_code=400, detail="User email missing")
 
+    # Build attendee list and optionally append Fireflies bot
+    attendees = list(dict.fromkeys(data.attendees or []))  # dedupe while preserving order
+
+    # Only add Fireflies when:
+    # - Bot email is configured
+    # - Meeting has at least two human participants (organizer + at least one attendee)
+    if FIREFLIES_BOT_EMAIL:
+        participant_count = 1 + len(attendees)  # organizer + attendees
+        if participant_count >= 2 and FIREFLIES_BOT_EMAIL not in attendees:
+            attendees.append(FIREFLIES_BOT_EMAIL)
+
     try:
         event = create_calendar_event(
             user_email=user_email,
             title=data.title,
             start_time=data.start_time,
             end_time=data.end_time,
-            attendees=data.attendees,
+            attendees=attendees,
             description=data.description,
             timezone=data.timezone,
         )

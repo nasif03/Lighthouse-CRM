@@ -68,22 +68,63 @@ def has_permission(user_doc: dict, org_id: str, required_permissions: list[str])
     return False
 
 
+def is_org_admin(user_doc: dict, org_id: str) -> bool:
+    """
+    Unified organization admin check.
+
+    A user is considered an org admin if:
+    - They are in org.admins, OR
+    - They have at least one role whose permissions include 'admin:users' or 'admin:roles'.
+
+    Super admin automatically passes via has_permission.
+    """
+    # Delegate to has_permission so super admin and org.admins are also treated as admins
+    return has_permission(user_doc, org_id, ["admin:users", "admin:roles"])
+
+
 def has_lead_permission(user_doc: dict, org_id: str) -> bool:
-    """Check if user has lead-related permissions"""
-    return has_permission(user_doc, org_id, ["read:leads", "write:leads", "admin:leads"])
+    """Check if user has lead-related permissions for READ operations."""
+    # Read allowed if user has read/write/admin for leads (or is org admin / super admin via has_permission)
+    return has_permission(user_doc, org_id, ["read:leads", "write:leads", "admin:users", "admin:roles"])
+
+
+def has_lead_write_permission(user_doc: dict, org_id: str) -> bool:
+    """Check if user has lead-related permissions for WRITE operations."""
+    # Write allowed if user has write/admin for leads (or is org admin / super admin via has_permission)
+    return has_permission(user_doc, org_id, ["write:leads", "admin:users", "admin:roles"])
+
+
+def has_lead_admin_permission(user_doc: dict, org_id: str) -> bool:
+    """Check if user has admin-level lead permissions."""
+    return has_permission(user_doc, org_id, ["admin:users", "admin:roles"])
 
 
 def has_contact_permission(user_doc: dict, org_id: str) -> bool:
-    """Check if user has contact-related permissions"""
-    return has_permission(user_doc, org_id, ["read:contacts", "write:contacts", "admin:contacts"])
+    """Check if user has contact-related permissions for READ operations."""
+    return has_permission(user_doc, org_id, ["read:contacts", "write:contacts", "admin:users", "admin:roles"])
+
+
+def has_contact_write_permission(user_doc: dict, org_id: str) -> bool:
+    """Check if user has contact-related permissions for WRITE operations."""
+    return has_permission(user_doc, org_id, ["write:contacts", "admin:users", "admin:roles"])
 
 
 def has_deal_permission(user_doc: dict, org_id: str) -> bool:
-    """Check if user has deal-related permissions"""
-    return has_permission(user_doc, org_id, ["read:deals", "write:deals", "admin:deals"])
+    """Check if user has deal-related permissions for READ operations."""
+    return has_permission(user_doc, org_id, ["read:deals", "write:deals", "admin:users", "admin:roles"])
+
+
+def has_deal_write_permission(user_doc: dict, org_id: str) -> bool:
+    """Check if user has deal-related permissions for WRITE operations."""
+    return has_permission(user_doc, org_id, ["write:deals", "admin:users", "admin:roles"])
 
 
 def has_account_permission(user_doc: dict, org_id: str) -> bool:
-    """Check if user has account-related permissions"""
-    return has_permission(user_doc, org_id, ["read:accounts", "write:accounts", "admin:accounts"])
+    """Check if user has account-related permissions for READ operations."""
+    return has_permission(user_doc, org_id, ["read:accounts", "write:accounts", "admin:users", "admin:roles"])
+
+
+def has_account_write_permission(user_doc: dict, org_id: str) -> bool:
+    """Check if user has account-related permissions for WRITE operations."""
+    return has_permission(user_doc, org_id, ["write:accounts", "admin:users", "admin:roles"])
 

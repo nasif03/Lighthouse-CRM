@@ -37,6 +37,11 @@ STREAM_CHAT_API_KEY = os.getenv("STREAM_CHAT_API_KEY", "n8nh34grh4b3")
 STREAM_CHAT_API_SECRET = os.getenv("STREAM_CHAT_API_SECRET", "hydg2yrmqfktv4d4xauv7s9g5mebtsmn2a9nt3byw85vaxdu5sdkdyzx3kydmnsq")
 STREAM_CHAT_APP_ID = os.getenv("STREAM_CHAT_APP_ID", "1451679")
 
+# Fireflies configuration
+# Default to Atiya's email so her Fireflies account is invited to all meetings.
+# Can be overridden via FIREFLIES_BOT_EMAIL env var.
+FIREFLIES_BOT_EMAIL = os.getenv("FIREFLIES_BOT_EMAIL", "atiya.tasnim@northsouth.edu")
+
 # Support AI / in-app assistant configuration
 SUPPORT_AI_API_KEY = os.getenv("SUPPORT_AI_API_KEY")
 SUPPORT_AI_MODEL = os.getenv("SUPPORT_AI_MODEL", "gpt-4o-mini")

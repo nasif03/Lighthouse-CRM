@@ -9,7 +9,7 @@ from config.database import leads_collection, accounts_collection, contacts_coll
 from services.activity_log import log_lead_created, log_lead_converted
 from utils.performance import time_operation, time_database_query
 from utils.query_filters import build_user_filter, get_user_ids
-from utils.permissions import has_lead_permission
+from utils.permissions import has_lead_permission, has_lead_admin_permission, has_lead_write_permission
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -112,8 +112,10 @@ async def get_leads(
                 detail="You do not have permission to view leads. Contact your administrator to assign you a role with lead permissions (read:leads or write:leads)."
             )
         
-        # Build filter with both orgId and ownerId for data isolation
-        query_filter = build_user_filter(user_doc, include_owner=True)
+        # Build filter with orgId only so everyone with lead permissions
+        # in the organization can see lead progression (org-wide view).
+        # Mutating endpoints still enforce owner-based restrictions.
+        query_filter = build_user_filter(user_doc, include_owner=False)
         
         try:
             with time_database_query("leads", "find"):
@@ -170,9 +172,19 @@ async def update_lead_status(
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
-        
-        # Build filter to ensure user can only update their own leads
-        query_filter = build_user_filter(user_doc, include_owner=True)
+
+        # Resolve org/owner and enforce WRITE-level permission (write:leads or admin:leads)
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
+        if not has_lead_write_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to update leads. Contact your administrator to assign you a role with lead write permissions (write:leads)."
+            )
+
+        # Build filter for org-wide write: any lead in the current organization.
+        # Tenant isolation is still enforced by build_user_filter via orgId.
+        query_filter = build_user_filter(user_doc, include_owner=False)
         query_filter["_id"] = ObjectId(lead_id)
         
         # Fetch the lead - only if it belongs to the current user
@@ -247,9 +259,16 @@ async def convert_lead_to_deal(
         user_ids = get_user_ids(user_doc)
         owner_id = user_ids["ownerId"]
         org_id = user_ids["orgId"]
+
+        # Require WRITE-level lead permission to convert
+        if not has_lead_write_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to convert leads. Contact your administrator to assign you a role with lead write permissions (write:leads)."
+            )
         
-        # Build filter to ensure user can only convert their own leads
-        query_filter = build_user_filter(user_doc, include_owner=True)
+        # Build filter for org-wide write: any lead in the current organization.
+        query_filter = build_user_filter(user_doc, include_owner=False)
         query_filter["_id"] = ObjectId(lead_id)
         
         # Fetch the lead - only if it belongs to the current user
@@ -370,9 +389,18 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
         user_doc = current_user.get("user_doc")
         if not user_doc:
             raise HTTPException(status_code=404, detail="User not found in database")
+
+        # Resolve org/owner and enforce WRITE-level permission
+        user_ids = get_user_ids(user_doc)
+        org_id = user_ids["orgId"]
+        if not has_lead_write_permission(user_doc, org_id):
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have permission to delete leads. Contact your administrator to assign you a role with lead write permissions (write:leads)."
+            )
         
-        # Build filter to ensure user can only delete their own leads
-        query_filter = build_user_filter(user_doc, include_owner=True)
+        # Build filter for org-wide write: any lead in the current organization.
+        query_filter = build_user_filter(user_doc, include_owner=False)
         query_filter["_id"] = ObjectId(lead_id)
         
         # Check if lead exists and belongs to user
