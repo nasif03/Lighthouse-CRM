@@ -145,11 +145,36 @@ class LeadsViewModel(
 
     fun convertLead(leadId: String) {
         viewModelScope.launch {
-            Log.d(TAG, "Converting lead: $leadId")
+            Log.d(TAG, "=== VIEWMODEL: Starting lead conversion ===")
+            Log.d(TAG, "VIEWMODEL: Converting lead ID: $leadId")
             _state.update { it.copy(actionInProgress = leadId) }
             val result = leadsRepository.convertLead(leadId)
             result.onSuccess { convertResponse ->
-                Log.d(TAG, "Lead converted successfully: $leadId, accountId=${convertResponse.accountId}, contactId=${convertResponse.contactId}, dealId=${convertResponse.dealId}")
+                Log.d(TAG, "=== VIEWMODEL: Lead conversion successful ===")
+                Log.d(TAG, "VIEWMODEL: Lead ID: $leadId")
+                Log.d(TAG, "VIEWMODEL: Created Account ID: ${convertResponse.accountId}")
+                Log.d(TAG, "VIEWMODEL: Created Contact ID: ${convertResponse.contactId}")
+                Log.d(TAG, "VIEWMODEL: Created Deal ID: ${convertResponse.dealId}")
+                Log.d(TAG, "VIEWMODEL: Response message: ${convertResponse.message}")
+                
+                if (convertResponse.accountId.isNotBlank()) {
+                    Log.d(TAG, "✅ ACCOUNT CREATED: ${convertResponse.accountId}")
+                } else {
+                    Log.w(TAG, "⚠️ WARNING: Account ID is blank in response")
+                }
+                
+                if (convertResponse.contactId.isNotBlank()) {
+                    Log.d(TAG, "✅ CONTACT CREATED: ${convertResponse.contactId}")
+                } else {
+                    Log.w(TAG, "⚠️ WARNING: Contact ID is blank in response")
+                }
+                
+                if (convertResponse.dealId.isNotBlank()) {
+                    Log.d(TAG, "✅ DEAL CREATED: ${convertResponse.dealId}")
+                } else {
+                    Log.w(TAG, "⚠️ WARNING: Deal ID is blank in response")
+                }
+                
                 _state.update {
                     it.copy(
                         infoMessage = "Lead converted successfully! Created Account, Contact, and Deal.",
@@ -161,9 +186,12 @@ class LeadsViewModel(
                         )
                     )
                 }
+                Log.d(TAG, "VIEWMODEL: Refreshing leads list...")
                 refreshLeads()
+                Log.d(TAG, "=== VIEWMODEL: Lead conversion complete ===")
             }.onFailure { error ->
-                Log.e(TAG, "Failed to convert lead: ${error.message}", error)
+                Log.e(TAG, "=== VIEWMODEL: Lead conversion failed ===")
+                Log.e(TAG, "VIEWMODEL: Error: ${error.message}", error)
                 _state.update { it.copy(errorMessage = error.message, actionInProgress = null) }
             }
         }

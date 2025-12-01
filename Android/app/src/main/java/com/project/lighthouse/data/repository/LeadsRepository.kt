@@ -97,12 +97,22 @@ class LeadsRepository {
     suspend fun convertLead(leadId: String): Result<ConvertLeadResponse> =
         withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Converting lead $leadId")
+                Log.d(TAG, "=== LEAD CONVERSION START ===")
+                Log.d(TAG, "Converting lead ID: $leadId")
                 val response = ApiClient.leadsApi.convertLead(leadId)
+                Log.d(TAG, "Convert lead API response code: ${response.code()}")
                 if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!)
+                    val convertResponse = response.body()!!
+                    Log.d(TAG, "=== LEAD CONVERSION SUCCESS ===")
+                    Log.d(TAG, "Created Account ID: ${convertResponse.accountId}")
+                    Log.d(TAG, "Created Contact ID: ${convertResponse.contactId}")
+                    Log.d(TAG, "Created Deal ID: ${convertResponse.dealId}")
+                    Log.d(TAG, "Response message: ${convertResponse.message}")
+                    Log.d(TAG, "=== LEAD CONVERSION END ===")
+                    Result.success(convertResponse)
                 } else {
                     val errorBody = response.errorBody()?.string().orEmpty()
+                    Log.e(TAG, "=== LEAD CONVERSION FAILED ===")
                     Log.e(TAG, "Convert lead error ${response.code()} $errorBody")
                     Result.failure(
                         ApiException.HttpError(

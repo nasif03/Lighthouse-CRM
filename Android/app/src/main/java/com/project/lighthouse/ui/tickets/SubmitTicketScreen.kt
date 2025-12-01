@@ -379,10 +379,10 @@ private fun TicketForm(
                     }
                 }
 
-                // Submit Button
+                // Submit Button - Always enabled (validation happens in ViewModel)
                 Button(
                     onClick = onSubmitTicket,
-                    enabled = !state.isSubmitting && state.name.isNotBlank() && state.email.isNotBlank() && state.subject.isNotBlank() && state.description.isNotBlank(),
+                    enabled = !state.isSubmitting,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (state.isSubmitting) {

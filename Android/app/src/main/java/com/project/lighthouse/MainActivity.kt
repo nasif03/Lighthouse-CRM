@@ -790,7 +790,19 @@ class MainActivity : ComponentActivity() {
                                     factory = TicketsViewModelFactory(AppModule.getTicketsRepository(applicationContext))
                                 )
                                 val ticketsState by ticketsViewModel.state.collectAsStateWithLifecycle()
-                                val orgId = authState.user?.orgId as? String
+
+                                // Use active tenant (current organization) instead of relying on user.orgId
+                                // This matches the frontend's activeTenantId behavior and avoids null orgId issues.
+                                val organizationRepository = remember { AppModule.getOrganizationRepository(applicationContext) }
+                                var activeTenantId by remember { mutableStateOf<String?>(null) }
+
+                                LaunchedEffect(Unit) {
+                                    // Best-effort fetch of tenants; if it fails, activeTenantId stays null
+                                    val tenantsResult = organizationRepository.getTenants()
+                                    activeTenantId = tenantsResult.getOrNull()?.activeTenantId
+                                }
+
+                                val orgId = activeTenantId
 
                                 TicketsScreen(
                                     state = ticketsState,
@@ -864,7 +876,17 @@ class MainActivity : ComponentActivity() {
                                 val ticketsState by ticketsViewModel.state.collectAsStateWithLifecycle()
                                 
                                 val createTicketUser = authState.user
-                                val createTicketOrgId = createTicketUser?.orgId as? String
+
+                                // Reuse active tenant as the current organization for ticket creation
+                                val organizationRepository = remember { AppModule.getOrganizationRepository(applicationContext) }
+                                var activeTenantId by remember { mutableStateOf<String?>(null) }
+
+                                LaunchedEffect(Unit) {
+                                    val tenantsResult = organizationRepository.getTenants()
+                                    activeTenantId = tenantsResult.getOrNull()?.activeTenantId
+                                }
+
+                                val createTicketOrgId = activeTenantId
                                 
                                 // Initialize form with user data if not already set
                                 LaunchedEffect(createTicketUser) {
