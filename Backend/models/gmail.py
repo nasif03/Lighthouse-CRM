@@ -1,5 +1,5 @@
 """Gmail-related Pydantic models"""
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict
 
 class GmailAuthRequest(BaseModel):
@@ -16,7 +16,7 @@ class GmailMessage(BaseModel):
     id: str
     threadId: str
     subject: str
-    from_: str
+    from_: str = Field(alias='from')
     date: str
     snippet: str
     body: str
@@ -24,9 +24,7 @@ class GmailMessage(BaseModel):
     
     class Config:
         from_attributes = True
-        fields = {
-            'from_': 'from'
-        }
+        populate_by_name = True  # Allow both 'from' and 'from_' to work
 
 class GmailMessagesResponse(BaseModel):
     messages: List[GmailMessage]

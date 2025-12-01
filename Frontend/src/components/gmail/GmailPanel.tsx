@@ -75,6 +75,7 @@ export default function GmailPanel() {
   const [recentAttendees, setRecentAttendees] = useState<string[]>([]);
   const [showAttendeeSuggestions, setShowAttendeeSuggestions] = useState(false);
   const [showMeetingMenu, setShowMeetingMenu] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<typeof messages[0] | null>(null);
   const attendeeInputRef = useRef<HTMLInputElement>(null);
   const meetingMenuRef = useRef<HTMLDivElement>(null);
 
@@ -457,6 +458,43 @@ export default function GmailPanel() {
     }
   };
 
+  // Helper functions
+  const extractEmail = (from?: string): string => {
+    if (!from) return 'unknown@unknown';
+    const match = from.match(/<(.+)>/);
+    if (match) return match[1];
+    const parts = from.split(' ');
+    return parts.pop() || from || 'unknown@unknown';
+  };
+
+  const formatRelativeTime = (dateString?: string) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diff = now.getTime() - date.getTime();
+      const minutes = Math.floor(diff / (1000 * 60));
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+      if (days >= 3) {
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      if (days >= 1) {
+        return `${days}d ago`;
+      }
+      if (hours >= 1) {
+        return `${hours}h ago`;
+      }
+      if (minutes >= 1) {
+        return `${minutes}m ago`;
+      }
+      return 'Just now';
+    } catch {
+      return dateString || '';
+    }
+  };
+
   if (error) {
     return (
       <div className="h-full w-full flex flex-col p-4">
@@ -578,43 +616,13 @@ export default function GmailPanel() {
             ) : (
               <div className="space-y-2">
                 {messages.map(msg => {
-                  const extractEmail = (from?: string): string => {
-                    if (!from) return 'unknown@unknown';
-                    const match = from.match(/<(.+)>/);
-                    if (match) return match[1];
-                    const parts = from.split(' ');
-                    return parts.pop() || from || 'unknown@unknown';
-                  };
-                  const formatRelativeTime = (dateString?: string) => {
-                    if (!dateString) return '';
-                    try {
-                      const date = new Date(dateString);
-                      const now = new Date();
-                      const diff = now.getTime() - date.getTime();
-                      const minutes = Math.floor(diff / (1000 * 60));
-                      const hours = Math.floor(diff / (1000 * 60 * 60));
-                      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-                      if (days >= 3) {
-                        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                      }
-                      if (days >= 1) {
-                        return `${days}d ago`;
-                      }
-                      if (hours >= 1) {
-                        return `${hours}h ago`;
-                      }
-                      if (minutes >= 1) {
-                        return `${minutes}m ago`;
-                      }
-                      return 'Just now';
-                    } catch {
-                      return dateString || '';
-                    }
-                  };
 
                   return (
-                    <div key={msg.id} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div 
+                      key={msg.id} 
+                      className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedEmail(msg)}
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold text-gray-800 truncate">{msg.subject || '(No Subject)'}</div>
@@ -623,7 +631,10 @@ export default function GmailPanel() {
                         <div className="text-xs text-gray-400 flex-shrink-0 mt-0.5">{formatRelativeTime(msg.date)}</div>
                       </div>
                       <button
-                        onClick={() => openMeetingModal(extractEmail(msg.from))}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openMeetingModal(extractEmail(msg.from));
+                        }}
                         className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium"
                         title="Schedule a meeting with this sender"
                       >
@@ -994,6 +1005,101 @@ export default function GmailPanel() {
               </Button>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Email Detail Modal */}
+      {selectedEmail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedEmail(null)}>
+          <div onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <Card className="w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <CardHeader className="flex items-center justify-between border-b border-gray-200">
+              <h3 className="text-lg font-semibold">Email Details</h3>
+              <button
+                onClick={() => setSelectedEmail(null)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Close email details"
+              >
+                ✕
+              </button>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto">
+              <div className="space-y-4">
+                {/* From */}
+                <div>
+                  <label className="text-sm font-medium text-gray-600 block mb-1">From</label>
+                  <p className="text-base text-gray-900">{selectedEmail.from || 'Unknown'}</p>
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <label className="text-sm font-medium text-gray-600 block mb-1">Subject</label>
+                  <p className="text-base text-gray-900 font-semibold">{selectedEmail.subject || '(No Subject)'}</p>
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="text-sm font-medium text-gray-600 block mb-1">Date</label>
+                  <p className="text-base text-gray-900">
+                    {selectedEmail.date ? new Date(selectedEmail.date).toLocaleString() : 'Unknown'}
+                  </p>
+                </div>
+
+                {/* Labels */}
+                {selectedEmail.labels && selectedEmail.labels.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600 block mb-1">Labels</label>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedEmail.labels.map((label, index) => (
+                        <span key={index} className="px-2 py-1 bg-brand-100 text-brand-800 rounded text-xs">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Body */}
+                <div>
+                  <label className="text-sm font-medium text-gray-600 block mb-1">Message</label>
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    {selectedEmail.body ? (
+                      <div 
+                        className="text-sm text-gray-900 whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-600 italic">{selectedEmail.snippet || 'No content available'}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Snippet (if body is not available) */}
+                {selectedEmail.body && selectedEmail.snippet && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600 block mb-1">Preview</label>
+                    <p className="text-sm text-gray-600 italic">{selectedEmail.snippet}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <Button 
+                onClick={() => {
+                  const email = extractEmail(selectedEmail.from);
+                  setSelectedEmail(null);
+                  openMeetingModal(email);
+                }}
+                variant="secondary"
+              >
+                Schedule Meeting
+              </Button>
+              <Button onClick={() => setSelectedEmail(null)}>
+                Close
+              </Button>
+            </div>
+          </Card>
+          </div>
         </div>
       )}
 

@@ -195,6 +195,12 @@ def get_messages(user_email: str, max_results: int = 10, query: str = '') -> Lis
                 subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
                 sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
                 date = next((h['value'] for h in headers if h['name'] == 'Date'), '')
+
+                # Add this temporarily to see what's in headers
+                print(f"Headers: {headers}")
+                print(f"Sender: {sender}\n\n\n")
+                
+                
                 
                 # Extract snippet
                 snippet = message.get('snippet', '')

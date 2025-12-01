@@ -142,19 +142,20 @@ async def get_gmail_messages(
         messages = get_messages(user_email, max_results=max_results, query=query)
         
         # Convert to response model
-        gmail_messages = [
-            GmailMessage(
-                id=msg['id'],
-                threadId=msg.get('threadId', ''),
-                subject=msg.get('subject', ''),
-                from_=msg.get('from', ''),
-                date=msg.get('date', ''),
-                snippet=msg.get('snippet', ''),
-                body=msg.get('body', ''),
-                labels=msg.get('labels', [])
-            )
-            for msg in messages
-        ]
+        gmail_messages = []
+        for msg in messages:
+            # Use dict with 'from' key to match the Field alias
+            msg_dict = {
+                'id': msg['id'],
+                'threadId': msg.get('threadId', ''),
+                'subject': msg.get('subject', ''),
+                'from': msg.get('from', ''),  # Use 'from' to match Field alias
+                'date': msg.get('date', ''),
+                'snippet': msg.get('snippet', ''),
+                'body': msg.get('body', ''),
+                'labels': msg.get('labels', [])
+            }
+            gmail_messages.append(GmailMessage(**msg_dict))
         
         return GmailMessagesResponse(
             messages=gmail_messages,
