@@ -27,8 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -73,18 +75,36 @@ fun LeadsScreen(
     onConvertLead: (String) -> Unit,
     onDeleteLead: (String) -> Unit,
     onDismissMessage: () -> Unit,
+    onNavigateToAccount: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(state.errorMessage, state.infoMessage) {
+    LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             onDismissMessage()
         }
-        state.infoMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            onDismissMessage()
+    }
+
+    LaunchedEffect(state.infoMessage, state.lastConvertedEntities) {
+        state.infoMessage?.let { message ->
+            val convertedEntities = state.lastConvertedEntities
+            if (convertedEntities != null && onNavigateToAccount != null) {
+                // Show snackbar with action to view account
+                val result = snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = "View Account",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    onNavigateToAccount(convertedEntities.accountId)
+                }
+                onDismissMessage()
+            } else {
+                snackbarHostState.showSnackbar(message)
+                onDismissMessage()
+            }
         }
     }
 
@@ -128,7 +148,7 @@ fun LeadsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        } else if (state.leads.isEmpty()) {
+        } else if (state.leads.filter { it.status != "converted" }.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -157,6 +177,10 @@ fun LeadsScreen(
                 )
             }
         } else {
+            // Filter out converted leads from main list (matches frontend behavior)
+            val activeLeads = state.leads.filter { it.status != "converted" }
+            val convertedLeads = state.leads.filter { it.status == "converted" }
+            
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -164,7 +188,7 @@ fun LeadsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(state.leads, key = { it.id }) { lead ->
+                items(activeLeads, key = { it.id }) { lead ->
                     LeadCard(
                         lead = lead,
                         isBusy = state.actionInProgress == lead.id,
@@ -172,6 +196,28 @@ fun LeadsScreen(
                         onConvert = { onConvertLead(lead.id) },
                         onDelete = { onDeleteLead(lead.id) }
                     )
+                }
+                
+                // Show converted leads in a separate section (de-emphasized)
+                if (convertedLeads.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Converted Leads",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Gray500,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(convertedLeads, key = { it.id }) { lead ->
+                        LeadCard(
+                            lead = lead,
+                            isBusy = state.actionInProgress == lead.id,
+                            onUpdateStatus = { status -> onUpdateStatus(lead.id, status) },
+                            onConvert = { onConvertLead(lead.id) },
+                            onDelete = { onDeleteLead(lead.id) }
+                        )
+                    }
                 }
             }
         }
@@ -385,16 +431,9 @@ private fun CreateLeadDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = state.phone,
-                    onValueChange = { onFieldChange(null, null, it, null) },
-                    label = { Text("Phone") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
                     value = state.source,
                     onValueChange = { onFieldChange(null, null, null, it) },
-                    label = { Text("Source") },
+                    label = { Text("Source (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

@@ -23,11 +23,24 @@ data class CreateDealRequest(
     @SerializedName("amount") val amount: Double? = null,
     @SerializedName("currency") val currency: String = "USD",
     @SerializedName("stageId") val stageId: String = "prospecting",
-    @SerializedName("stageName") val stageName: String = "Prospecting"
+    @SerializedName("stageName") val stageName: String = "Prospecting",
+    @SerializedName("accountId") val accountId: String? = null,
+    @SerializedName("contactId") val contactId: String? = null
 )
 
 data class UpdateDealStageRequest(
     @SerializedName("stageId") val stageId: String,
     @SerializedName("stageName") val stageName: String? = null
+)
+
+data class UpdateDealRequest(
+    @SerializedName("name") val name: String,
+    @SerializedName("amount") val amount: Double? = null,
+    @SerializedName("currency") val currency: String = "USD",
+    @SerializedName("stageId") val stageId: String,
+    @SerializedName("stageName") val stageName: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("accountId") val accountId: String? = null,
+    @SerializedName("contactId") val contactId: String? = null
 )
 

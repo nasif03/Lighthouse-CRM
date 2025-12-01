@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -93,6 +94,7 @@ fun TicketDetailScreen(
     onToggleStatusModal: (Boolean) -> Unit,
     onUpdateSelectedAssignee: (String) -> Unit,
     onUpdateSelectedStatus: (String) -> Unit,
+    onCreateJiraIssue: () -> Unit,
     onNavigateBack: () -> Unit,
     onDismissMessage: () -> Unit,
     modifier: Modifier = Modifier
@@ -199,9 +201,8 @@ fun TicketDetailScreen(
                 item {
                     JiraIntegrationCard(
                         ticket = state.ticket,
-                        onCreateJiraIssue = {
-                            // TODO: Implement Jira issue creation
-                        }
+                        isCreating = state.isCreatingJiraIssue,
+                        onCreateJiraIssue = onCreateJiraIssue
                     )
                 }
 
@@ -612,6 +613,7 @@ private fun PriorityCard(
 @Composable
 private fun JiraIntegrationCard(
     ticket: TicketDto,
+    isCreating: Boolean = false,
     onCreateJiraIssue: () -> Unit
 ) {
     val context = LocalContext.current
@@ -651,9 +653,17 @@ private fun JiraIntegrationCard(
                     )
                     Button(
                         onClick = onCreateJiraIssue,
+                        enabled = !isCreating,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
+                        if (isCreating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text("Create Jira Issue", fontSize = 13.sp)
                     }
                 }

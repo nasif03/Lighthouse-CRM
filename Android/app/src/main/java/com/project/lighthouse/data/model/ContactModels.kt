@@ -22,6 +22,18 @@ data class CreateContactRequest(
     @SerializedName("lastName") val lastName: String? = null,
     @SerializedName("email") val email: String,
     @SerializedName("phone") val phone: String? = null,
-    @SerializedName("title") val title: String? = null
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("accountId") val accountId: String? = null,
+    @SerializedName("tags") val tags: List<String> = emptyList()
+)
+
+data class UpdateContactRequest(
+    @SerializedName("firstName") val firstName: String,
+    @SerializedName("lastName") val lastName: String? = null,
+    @SerializedName("email") val email: String,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("accountId") val accountId: String? = null,
+    @SerializedName("tags") val tags: List<String> = emptyList()
 )
 

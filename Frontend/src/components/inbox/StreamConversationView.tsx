@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useStreamChat } from '../../hooks/useStreamChat';
 import { useInboxStore } from '../../store/inboxStore';
 import { useAuthStore } from '../../store/authStore';
-import { Channel, MessageInput, Window, useChannelStateContext, useChannelActionContext } from 'stream-chat-react';
+import { Channel, useChannelStateContext, useChannelActionContext } from 'stream-chat-react';
 import Input from '../ui/Input';
 import { VALIDATION_LIMITS } from '../../utils/validation';
 import Button from '../ui/Button';
@@ -99,7 +99,9 @@ function CustomMessageList() {
         padding: '10px',
         overflowY: 'auto',
         overflowX: 'hidden',
-        position: 'static'
+        position: 'static',
+        minHeight: 0,
+        maxHeight: '100%'
       }}
     >
       {sortedMessages.map((message: any) => (
@@ -310,48 +312,30 @@ export default function StreamConversationView() {
 
   return (
     <div 
-      className="chat-container"
+      className="flex-1 flex flex-col min-h-0 overflow-hidden"
       style={{
-        height: '420px',
         display: 'flex',
         flexDirection: 'column',
-        border: '1px solid #ddd',
-        borderRadius: '8px',
+        minHeight: 0,
         overflow: 'hidden'
       }}
     >
-      {/* Chat Header - Fixed at top of chat box */}
-      <div className="px-3 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold overflow-hidden">
-            {conversation.participantAvatar && conversation.participantAvatar.startsWith('http') ? (
-              <img 
-                src={conversation.participantAvatar} 
-                alt={conversation.participantName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span>{otherMember[0]?.toUpperCase() || '?'}</span>
-            )}
-          </div>
-          
-          <span className="font-semibold text-gray-900">{otherMember}</span>
-        </div>
-        <StreamAudioCallButton
-          participantId={conversation.participantId}
-          participantName={conversation.participantName}
-          conversationId={callTargetId}
-        />
-      </div>
-
-      {/* Stream Chat Channel - Fixed height scrollable container */}
+      {/* Stream Chat Channel - Messages area (scrollable) */}
       <Channel channel={channel}>
-        <Window>
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <CustomMessageList />
-            <CustomMessageInput />
-          </div>
-        </Window>
+        <div 
+          className="flex-1 flex flex-col min-h-0 overflow-hidden"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            overflow: 'hidden'
+          }}
+        >
+          {/* Messages List - Only this area scrolls */}
+          <CustomMessageList />
+          {/* Input - Fixed at bottom */}
+          <CustomMessageInput />
+        </div>
       </Channel>
     </div>
   );

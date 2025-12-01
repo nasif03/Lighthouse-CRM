@@ -2,6 +2,7 @@ package com.project.lighthouse.data.api
 
 import com.project.lighthouse.data.model.CreateDealRequest
 import com.project.lighthouse.data.model.DealDto
+import com.project.lighthouse.data.model.UpdateDealRequest
 import com.project.lighthouse.data.model.UpdateDealStageRequest
 import retrofit2.Response
 import retrofit2.http.Body
@@ -9,6 +10,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 interface DealsApiService {
@@ -19,6 +21,12 @@ interface DealsApiService {
     @POST("api/deals")
     suspend fun createDeal(
         @Body request: CreateDealRequest
+    ): Response<DealDto>
+
+    @PUT("api/deals/{dealId}")
+    suspend fun updateDeal(
+        @Path("dealId") dealId: String,
+        @Body request: UpdateDealRequest
     ): Response<DealDto>
 
     @PATCH("api/deals/{dealId}")

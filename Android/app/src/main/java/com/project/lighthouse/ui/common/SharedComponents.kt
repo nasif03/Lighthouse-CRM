@@ -43,12 +43,13 @@ import com.project.lighthouse.ui.theme.Yellow700
 @Composable
 fun WebStyleCard(
     modifier: Modifier = Modifier,
+    containerColor: androidx.compose.ui.graphics.Color? = null,
     content: @Composable () -> Unit
 ) {
     Card(
         modifier = modifier
             .border(1.dp, Gray200, RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = containerColor ?: Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(12.dp)
     ) {

@@ -5,6 +5,7 @@ import com.project.lighthouse.data.api.ApiClient
 import com.project.lighthouse.data.api.ApiException
 import com.project.lighthouse.data.model.CreateDealRequest
 import com.project.lighthouse.data.model.DealDto
+import com.project.lighthouse.data.model.UpdateDealRequest
 import com.project.lighthouse.data.model.UpdateDealStageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,6 +39,23 @@ class DealsRepository {
             } else {
                 val errorBody = response.errorBody()?.string().orEmpty()
                 Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to create deal" }))
+            }
+        } catch (e: IOException) {
+            Result.failure(ApiException.NetworkError("Network error: ${e.message}"))
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownError("Unexpected error: ${e.message}"))
+        }
+    }
+
+    suspend fun updateDeal(dealId: String, request: UpdateDealRequest): Result<DealDto> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Updating deal $dealId")
+            val response = ApiClient.dealsApi.updateDeal(dealId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val errorBody = response.errorBody()?.string().orEmpty()
+                Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to update deal" }))
             }
         } catch (e: IOException) {
             Result.failure(ApiException.NetworkError("Network error: ${e.message}"))

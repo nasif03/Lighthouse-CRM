@@ -236,6 +236,99 @@ class TicketsViewModel(
         _state.update { it.copy(createdTicketId = null) }
     }
 
+    fun toggleTicketSelection(ticketId: String) {
+        _state.update {
+            val currentSelection = it.selectedTicketIds
+            it.copy(
+                selectedTicketIds = if (currentSelection.contains(ticketId)) {
+                    currentSelection - ticketId
+                } else {
+                    currentSelection + ticketId
+                }
+            )
+        }
+    }
+
+    fun clearSelection() {
+        _state.update { it.copy(selectedTicketIds = emptySet()) }
+    }
+
+    fun bulkAssign(employeeId: String?) {
+        val selectedIds = _state.value.selectedTicketIds
+        if (selectedIds.isEmpty()) return
+
+        viewModelScope.launch {
+            Log.d(TAG, "Bulk assigning ${selectedIds.size} tickets to $employeeId")
+            _state.update { it.copy(isBulkActionInProgress = true, errorMessage = null) }
+            
+            var successCount = 0
+            var failureCount = 0
+            
+            selectedIds.forEach { ticketId ->
+                val result = ticketsRepository.updateTicket(
+                    ticketId = ticketId,
+                    assignedTo = employeeId
+                )
+                if (result.isSuccess) {
+                    successCount++
+                } else {
+                    failureCount++
+                }
+            }
+            
+            _state.update {
+                it.copy(
+                    isBulkActionInProgress = false,
+                    selectedTicketIds = emptySet(),
+                    infoMessage = if (failureCount == 0) {
+                        "Successfully assigned $successCount ticket(s)"
+                    } else {
+                        "Assigned $successCount ticket(s), $failureCount failed"
+                    }
+                )
+            }
+            refreshTickets()
+        }
+    }
+
+    fun bulkClose() {
+        val selectedIds = _state.value.selectedTicketIds
+        if (selectedIds.isEmpty()) return
+
+        viewModelScope.launch {
+            Log.d(TAG, "Bulk closing ${selectedIds.size} tickets")
+            _state.update { it.copy(isBulkActionInProgress = true, errorMessage = null) }
+            
+            var successCount = 0
+            var failureCount = 0
+            
+            selectedIds.forEach { ticketId ->
+                val result = ticketsRepository.updateTicket(
+                    ticketId = ticketId,
+                    status = "closed"
+                )
+                if (result.isSuccess) {
+                    successCount++
+                } else {
+                    failureCount++
+                }
+            }
+            
+            _state.update {
+                it.copy(
+                    isBulkActionInProgress = false,
+                    selectedTicketIds = emptySet(),
+                    infoMessage = if (failureCount == 0) {
+                        "Successfully closed $successCount ticket(s)"
+                    } else {
+                        "Closed $successCount ticket(s), $failureCount failed"
+                    }
+                )
+            }
+            refreshTickets()
+        }
+    }
+
     companion object {
         private const val TAG = "TicketsViewModel"
     }

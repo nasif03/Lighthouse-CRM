@@ -95,8 +95,8 @@ class LeadsViewModel(
             val request = CreateLeadRequest(
                 name = currentForm.name.trim(),
                 email = currentForm.email.trim(),
-                phone = currentForm.phone.takeIf { it.isNotBlank() },
-                source = currentForm.source,
+                phone = null, // Phone not collected in create form (matches frontend)
+                source = currentForm.source.ifBlank { "web" },
                 status = "new"
             )
             val result = leadsRepository.createLead(request)
@@ -148,12 +148,17 @@ class LeadsViewModel(
             Log.d(TAG, "Converting lead: $leadId")
             _state.update { it.copy(actionInProgress = leadId) }
             val result = leadsRepository.convertLead(leadId)
-            result.onSuccess {
-                Log.d(TAG, "Lead converted successfully: $leadId")
+            result.onSuccess { convertResponse ->
+                Log.d(TAG, "Lead converted successfully: $leadId, accountId=${convertResponse.accountId}, contactId=${convertResponse.contactId}, dealId=${convertResponse.dealId}")
                 _state.update {
                     it.copy(
-                        infoMessage = "Lead converted",
-                        actionInProgress = null
+                        infoMessage = "Lead converted successfully! Created Account, Contact, and Deal.",
+                        actionInProgress = null,
+                        lastConvertedEntities = ConvertedEntities(
+                            accountId = convertResponse.accountId,
+                            contactId = convertResponse.contactId,
+                            dealId = convertResponse.dealId
+                        )
                     )
                 }
                 refreshLeads()
@@ -162,6 +167,10 @@ class LeadsViewModel(
                 _state.update { it.copy(errorMessage = error.message, actionInProgress = null) }
             }
         }
+    }
+
+    fun clearConvertedEntities() {
+        _state.update { it.copy(lastConvertedEntities = null) }
     }
 
     fun deleteLead(leadId: String) {

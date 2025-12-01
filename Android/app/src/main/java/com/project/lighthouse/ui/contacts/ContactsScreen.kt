@@ -20,8 +20,16 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -52,8 +60,10 @@ fun ContactsScreen(
     state: ContactsState,
     onRefresh: () -> Unit,
     onCreateContact: () -> Unit,
-    onUpdateForm: (String?, String?, String?, String?, String?) -> Unit,
+    onUpdateForm: (String?, String?, String?, String?, String?, String?, List<String>?) -> Unit,
     onToggleDialog: (Boolean) -> Unit,
+    onToggleEditDialog: (Boolean, ContactDto?) -> Unit,
+    onUpdateContact: () -> Unit,
     onDeleteContact: (String) -> Unit,
     onDismissMessage: () -> Unit,
     modifier: Modifier = Modifier
@@ -150,6 +160,10 @@ fun ContactsScreen(
                 items(state.contacts, key = { it.id }) { contact ->
                     ContactCard(
                         contact = contact,
+                        accountName = contact.accountId?.let { accountId ->
+                            state.accounts.find { it.id == accountId }?.name
+                        },
+                        onEdit = { onToggleEditDialog(true, contact) },
                         onDelete = { onDeleteContact(contact.id) },
                         isBusy = state.actionInProgress == contact.id
                     )
@@ -161,8 +175,19 @@ fun ContactsScreen(
     if (state.showCreateDialog) {
         CreateContactDialog(
             state = state.formState,
+            accounts = state.accounts,
             onDismiss = { onToggleDialog(false) },
             onSubmit = onCreateContact,
+            onFieldChange = onUpdateForm
+        )
+    }
+    
+    if (state.showEditDialog) {
+        EditContactDialog(
+            state = state.formState,
+            accounts = state.accounts,
+            onDismiss = { onToggleEditDialog(false, null) },
+            onSubmit = onUpdateContact,
             onFieldChange = onUpdateForm
         )
     }
@@ -171,7 +196,9 @@ fun ContactsScreen(
 @Composable
 private fun ContactCard(
     contact: ContactDto,
+    accountName: String?,
     isBusy: Boolean,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val fullName = "${contact.firstName.orEmpty()} ${contact.lastName.orEmpty()}".trim()
@@ -212,6 +239,16 @@ private fun ContactCard(
                 )
             }
             
+            // Account
+            accountName?.let {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Account: $it",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Gray400
+                )
+            }
+            
             // Title
             contact.title?.takeIf { it.isNotBlank() }?.let {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -224,11 +261,22 @@ private fun ContactCard(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Delete Button
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onEdit,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Edit", fontSize = 13.sp)
+                }
                 Button(
                     onClick = onDelete,
                     enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
                     Text("Delete", fontSize = 13.sp, color = Color.Red)
@@ -241,10 +289,16 @@ private fun ContactCard(
 @Composable
 private fun CreateContactDialog(
     state: ContactFormState,
+    accounts: List<com.project.lighthouse.data.model.AccountDto>,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    onFieldChange: (String?, String?, String?, String?, String?) -> Unit
+    onFieldChange: (String?, String?, String?, String?, String?, String?, List<String>?) -> Unit
 ) {
+    var accountDropdownExpanded by remember { mutableStateOf(false) }
+    val selectedAccount = state.selectedAccountId?.let { accountId ->
+        accounts.find { it.id == accountId }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Contact", style = MaterialTheme.typography.titleLarge) },
@@ -252,44 +306,204 @@ private fun CreateContactDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = state.firstName,
-                    onValueChange = { onFieldChange(it, null, null, null, null) },
+                    onValueChange = { onFieldChange(it, null, null, null, null, null, null) },
                     label = { Text("First Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.lastName,
-                    onValueChange = { onFieldChange(null, it, null, null, null) },
+                    onValueChange = { onFieldChange(null, it, null, null, null, null, null) },
                     label = { Text("Last Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.email,
-                    onValueChange = { onFieldChange(null, null, it, null, null) },
+                    onValueChange = { onFieldChange(null, null, it, null, null, null, null) },
                     label = { Text("Email") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.phone,
-                    onValueChange = { onFieldChange(null, null, null, it, null) },
+                    onValueChange = { onFieldChange(null, null, null, it, null, null, null) },
                     label = { Text("Phone") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.title,
-                    onValueChange = { onFieldChange(null, null, null, null, it) },
+                    onValueChange = { onFieldChange(null, null, null, null, it, null, null) },
                     label = { Text("Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Account selector
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { accountDropdownExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedAccount?.name ?: "Select Account (Optional)",
+                                color = if (selectedAccount != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Account dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = accountDropdownExpanded,
+                        onDismissRequest = { accountDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("None") },
+                            onClick = {
+                                // Pass null for accountId (6th parameter), null for tags (7th)
+                                onFieldChange(null, null, null, null, null, null, null)
+                                accountDropdownExpanded = false
+                            }
+                        )
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    // Pass account.id for accountId (6th parameter), null for tags (7th)
+                                    onFieldChange(null, null, null, null, null, account.id, null)
+                                    accountDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = onSubmit, enabled = !state.isSubmitting) {
                 Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EditContactDialog(
+    state: ContactFormState,
+    accounts: List<com.project.lighthouse.data.model.AccountDto>,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit,
+    onFieldChange: (String?, String?, String?, String?, String?, String?, List<String>?) -> Unit
+) {
+    var accountDropdownExpanded by remember { mutableStateOf(false) }
+    val selectedAccount = state.selectedAccountId?.let { accountId ->
+        accounts.find { it.id == accountId }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Contact", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = state.firstName,
+                    onValueChange = { onFieldChange(it, null, null, null, null, null, null) },
+                    label = { Text("First Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state.lastName,
+                    onValueChange = { onFieldChange(null, it, null, null, null, null, null) },
+                    label = { Text("Last Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state.email,
+                    onValueChange = { onFieldChange(null, null, it, null, null, null, null) },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state.phone,
+                    onValueChange = { onFieldChange(null, null, null, it, null, null, null) },
+                    label = { Text("Phone") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state.title,
+                    onValueChange = { onFieldChange(null, null, null, null, it, null, null) },
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Account selector
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { accountDropdownExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedAccount?.name ?: "Select Account (Optional)",
+                                color = if (selectedAccount != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Account dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = accountDropdownExpanded,
+                        onDismissRequest = { accountDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("None") },
+                            onClick = {
+                                onFieldChange(null, null, null, null, null, null, null)
+                                accountDropdownExpanded = false
+                            }
+                        )
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    onFieldChange(null, null, null, null, null, account.id, null)
+                                    accountDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSubmit, enabled = !state.isSubmitting) {
+                Text("Update")
             }
         },
         dismissButton = {

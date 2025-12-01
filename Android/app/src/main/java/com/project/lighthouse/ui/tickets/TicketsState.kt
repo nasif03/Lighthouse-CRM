@@ -29,6 +29,8 @@ data class TicketsState(
     val filterStatus: String? = null,
     val filterPriority: String? = null,
     val searchQuery: String = "",
-    val createdTicketId: String? = null // For navigation after creation
+    val createdTicketId: String? = null, // For navigation after creation
+    val selectedTicketIds: Set<String> = emptySet(), // For bulk actions
+    val isBulkActionInProgress: Boolean = false
 )
 

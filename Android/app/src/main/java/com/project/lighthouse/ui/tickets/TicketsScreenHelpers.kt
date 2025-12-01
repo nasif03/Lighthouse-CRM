@@ -1,5 +1,6 @@
 package com.project.lighthouse.ui.tickets
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +33,11 @@ data class TicketStats(
 )
 
 @Composable
-fun TicketStatsDashboard(stats: TicketStats) {
+fun TicketStatsDashboard(
+    stats: TicketStats,
+    currentFilterStatus: String? = null,
+    onStatusClick: (String?) -> Unit = {}
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -40,31 +46,41 @@ fun TicketStatsDashboard(stats: TicketStats) {
             label = "Total",
             value = stats.total.toString(),
             color = Gray900,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            isSelected = currentFilterStatus == null,
+            onClick = { onStatusClick(null) }
         )
         StatCard(
             label = "Open",
             value = stats.open.toString(),
             color = androidx.compose.ui.graphics.Color(0xFFD97706),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            isSelected = currentFilterStatus == "open",
+            onClick = { onStatusClick("open") }
         )
         StatCard(
             label = "In Progress",
             value = stats.inProgress.toString(),
             color = androidx.compose.ui.graphics.Color(0xFF2563EB),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            isSelected = currentFilterStatus == "in_progress",
+            onClick = { onStatusClick("in_progress") }
         )
         StatCard(
             label = "Resolved",
             value = stats.resolved.toString(),
             color = Green600,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            isSelected = currentFilterStatus == "resolved",
+            onClick = { onStatusClick("resolved") }
         )
         StatCard(
             label = "Closed",
             value = stats.closed.toString(),
             color = Gray600,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            isSelected = currentFilterStatus == "closed",
+            onClick = { onStatusClick("closed") }
         )
     }
 }
@@ -74,30 +90,35 @@ private fun StatCard(
     label: String,
     value: String,
     color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {}
 ) {
-    WebStyleCard(modifier = modifier) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = Gray500,
-                fontSize = 11.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = color,
-                fontSize = 18.sp
-            )
+    WebStyleCard(
+        modifier = modifier.clickable(onClick = onClick),
+        containerColor = if (isSelected) androidx.compose.ui.graphics.Color(0xFFE3F2FD) else Color.White
+    ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gray500,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                    fontSize = 18.sp
+                )
+            }
         }
     }
-}
 
 fun calculateStats(tickets: List<TicketDto>): TicketStats {
     return TicketStats(

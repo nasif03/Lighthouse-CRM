@@ -11,6 +11,12 @@ data class LeadFormState(
     val isSubmitting: Boolean = false
 )
 
+data class ConvertedEntities(
+    val accountId: String,
+    val contactId: String,
+    val dealId: String
+)
+
 data class LeadsState(
     val leads: List<LeadDto> = emptyList(),
     val isLoading: Boolean = false,
@@ -19,6 +25,7 @@ data class LeadsState(
     val infoMessage: String? = null,
     val showCreateDialog: Boolean = false,
     val formState: LeadFormState = LeadFormState(),
-    val actionInProgress: String? = null
+    val actionInProgress: String? = null,
+    val lastConvertedEntities: ConvertedEntities? = null
 )
 

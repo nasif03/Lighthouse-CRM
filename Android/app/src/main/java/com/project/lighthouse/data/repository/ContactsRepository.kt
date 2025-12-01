@@ -5,6 +5,7 @@ import com.project.lighthouse.data.api.ApiClient
 import com.project.lighthouse.data.api.ApiException
 import com.project.lighthouse.data.model.ContactDto
 import com.project.lighthouse.data.model.CreateContactRequest
+import com.project.lighthouse.data.model.UpdateContactRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -37,6 +38,23 @@ class ContactsRepository {
             } else {
                 val errorBody = response.errorBody()?.string().orEmpty()
                 Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to create contact" }))
+            }
+        } catch (e: IOException) {
+            Result.failure(ApiException.NetworkError("Network error: ${e.message}"))
+        } catch (e: Exception) {
+            Result.failure(ApiException.UnknownError("Unexpected error: ${e.message}"))
+        }
+    }
+
+    suspend fun updateContact(contactId: String, request: UpdateContactRequest): Result<ContactDto> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Updating contact $contactId")
+            val response = ApiClient.contactsApi.updateContact(contactId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val errorBody = response.errorBody()?.string().orEmpty()
+                Result.failure(ApiException.HttpError(response.code(), errorBody.ifBlank { "Failed to update contact" }))
             }
         } catch (e: IOException) {
             Result.failure(ApiException.NetworkError("Network error: ${e.message}"))

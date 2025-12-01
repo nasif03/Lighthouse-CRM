@@ -22,8 +22,11 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -71,8 +74,11 @@ fun DealsScreen(
     state: DealsState,
     onRefresh: () -> Unit,
     onCreateDeal: () -> Unit,
-    onUpdateForm: (String?, String?, String?) -> Unit,
+    onUpdateForm: (String?, String?, String?, String?, String?) -> Unit,
+    onUpdateEditForm: (String?, String?, String?, String?, String?) -> Unit,
     onToggleDialog: (Boolean) -> Unit,
+    onToggleEditDialog: (Boolean, DealDto?) -> Unit,
+    onUpdateDeal: () -> Unit,
     onUpdateStage: (String, String, String?) -> Unit,
     onDeleteDeal: (String) -> Unit,
     onDismissMessage: () -> Unit,
@@ -170,7 +176,11 @@ fun DealsScreen(
                 items(state.deals, key = { it.id }) { deal ->
                     DealCard(
                         deal = deal,
+                        accountName = deal.accountId?.let { accountId ->
+                            state.accounts.find { it.id == accountId }?.name
+                        },
                         isBusy = state.actionInProgress == deal.id,
+                        onEdit = { onToggleEditDialog(true, deal) },
                         onUpdateStage = { stageId ->
                             onUpdateStage(deal.id, stageId, stageId.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() })
                         },
@@ -184,9 +194,22 @@ fun DealsScreen(
     if (state.showCreateDialog) {
         CreateDealDialog(
             state = state.formState,
+            accounts = state.accounts,
+            contacts = state.contacts,
             onDismiss = { onToggleDialog(false) },
             onSubmit = onCreateDeal,
             onFieldChange = onUpdateForm
+        )
+    }
+    
+    if (state.showEditDialog) {
+        EditDealDialog(
+            state = state.editFormState,
+            accounts = state.accounts,
+            contacts = state.contacts,
+            onDismiss = { onToggleEditDialog(false, null) },
+            onSubmit = onUpdateDeal,
+            onFieldChange = onUpdateEditForm
         )
     }
 }
@@ -194,7 +217,9 @@ fun DealsScreen(
 @Composable
 private fun DealCard(
     deal: DealDto,
+    accountName: String?,
     isBusy: Boolean,
+    onEdit: () -> Unit,
     onUpdateStage: (String) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -229,6 +254,16 @@ private fun DealCard(
                 color = Gray700
             )
             
+            // Account
+            accountName?.let {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Account: $it",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = Gray400
+                )
+            }
+            
             Spacer(modifier = Modifier.height(12.dp))
             
             // Stage Chip
@@ -242,12 +277,19 @@ private fun DealCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
+                    onClick = onEdit,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Edit", fontSize = 13.sp)
+                }
+                Button(
                     onClick = { stageMenuExpanded = true },
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Brand600)
                 ) {
-                    Text("Change Stage", fontSize = 13.sp)
+                    Text("Stage", fontSize = 13.sp)
                 }
                 Button(
                     onClick = onDelete,
@@ -276,12 +318,178 @@ private fun DealCard(
 }
 
 @Composable
-private fun CreateDealDialog(
+private fun EditDealDialog(
     state: DealFormState,
+    accounts: List<com.project.lighthouse.data.model.AccountDto>,
+    contacts: List<com.project.lighthouse.data.model.ContactDto>,
     onDismiss: () -> Unit,
     onSubmit: () -> Unit,
-    onFieldChange: (String?, String?, String?) -> Unit
+    onFieldChange: (String?, String?, String?, String?, String?) -> Unit
 ) {
+    var accountDropdownExpanded by remember { mutableStateOf(false) }
+    var contactDropdownExpanded by remember { mutableStateOf(false) }
+    var stageDropdownExpanded by remember { mutableStateOf(false) }
+    
+    val selectedAccount = state.selectedAccountId?.let { accountId ->
+        accounts.find { it.id == accountId }
+    }
+    val selectedContact = state.selectedContactId?.let { contactId ->
+        contacts.find { it.id == contactId }
+    }
+    val filteredContacts = if (state.selectedAccountId != null) {
+        contacts.filter { it.accountId == state.selectedAccountId }
+    } else {
+        contacts
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Deal", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = state.name,
+                    onValueChange = { onFieldChange(it, null, null, null, null) },
+                    label = { Text("Deal Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = state.amount,
+                    onValueChange = { onFieldChange(null, it, null, null, null) },
+                    label = { Text("Amount") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Account selector (required)
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { accountDropdownExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedAccount?.name ?: "Select Account *",
+                                color = if (selectedAccount != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Account dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = accountDropdownExpanded,
+                        onDismissRequest = { accountDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    onFieldChange(null, null, null, account.id, null)
+                                    accountDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Contact selector (optional, filtered by account)
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { contactDropdownExpanded = true },
+                        enabled = state.selectedAccountId != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedContact?.let { "${it.firstName.orEmpty()} ${it.lastName.orEmpty()}".trim() } ?: "Select Contact (Optional)",
+                                color = if (selectedContact != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Contact dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = contactDropdownExpanded,
+                        onDismissRequest = { contactDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("None") },
+                            onClick = {
+                                onFieldChange(null, null, null, null, null)
+                                contactDropdownExpanded = false
+                            }
+                        )
+                        filteredContacts.forEach { contact ->
+                            DropdownMenuItem(
+                                text = { Text("${contact.firstName.orEmpty()} ${contact.lastName.orEmpty()}".trim()) },
+                                onClick = {
+                                    onFieldChange(null, null, null, null, contact.id)
+                                    contactDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Stage selector
+                DealStageDropdown(
+                    selectedStage = state.stageId,
+                    onStageSelected = { onFieldChange(null, null, it, null, null) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSubmit, enabled = !state.isSubmitting) {
+                Text("Update")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CreateDealDialog(
+    state: DealFormState,
+    accounts: List<com.project.lighthouse.data.model.AccountDto>,
+    contacts: List<com.project.lighthouse.data.model.ContactDto>,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit,
+    onFieldChange: (String?, String?, String?, String?, String?) -> Unit
+) {
+    var accountDropdownExpanded by remember { mutableStateOf(false) }
+    var contactDropdownExpanded by remember { mutableStateOf(false) }
+    val selectedAccount = state.selectedAccountId?.let { accountId ->
+        accounts.find { it.id == accountId }
+    }
+    val selectedContact = state.selectedContactId?.let { contactId ->
+        contacts.find { it.id == contactId }
+    }
+    // Filter contacts by selected account if account is selected
+    val availableContacts = if (state.selectedAccountId != null) {
+        contacts.filter { it.accountId == state.selectedAccountId }
+    } else {
+        contacts
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Deal", style = MaterialTheme.typography.titleLarge) },
@@ -289,21 +497,107 @@ private fun CreateDealDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = state.name,
-                    onValueChange = { onFieldChange(it, null, null) },
+                    onValueChange = { onFieldChange(it, null, null, null, null) },
                     label = { Text("Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.amount,
-                    onValueChange = { onFieldChange(null, it, null) },
+                    onValueChange = { onFieldChange(null, it, null, null, null) },
                     label = { Text("Amount") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Account selector (required)
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { accountDropdownExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedAccount?.name ?: "Select Account *",
+                                color = if (selectedAccount != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Account dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = accountDropdownExpanded,
+                        onDismissRequest = { accountDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    onFieldChange(null, null, null, account.id, null)
+                                    accountDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Contact selector (optional, filtered by account)
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(
+                        onClick = { contactDropdownExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = state.selectedAccountId != null || availableContacts.isNotEmpty()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedContact?.let { "${it.firstName.orEmpty()} ${it.lastName.orEmpty()}".trim().ifBlank { it.email } } ?: "Select Contact (Optional)",
+                                color = if (selectedContact != null) Color.Black else Gray500
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Contact dropdown"
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = contactDropdownExpanded,
+                        onDismissRequest = { contactDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("None") },
+                            onClick = {
+                                onFieldChange(null, null, null, null, null)
+                                contactDropdownExpanded = false
+                            }
+                        )
+                        availableContacts.forEach { contact ->
+                            val contactName = "${contact.firstName.orEmpty()} ${contact.lastName.orEmpty()}".trim().ifBlank { contact.email }
+                            DropdownMenuItem(
+                                text = { Text(contactName) },
+                                onClick = {
+                                    onFieldChange(null, null, null, null, contact.id)
+                                    contactDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
                 DealStageDropdown(
                     selectedStage = state.stageId,
-                    onStageSelected = { onFieldChange(null, null, it) }
+                    onStageSelected = { onFieldChange(null, null, it, null, null) }
                 )
             }
         },

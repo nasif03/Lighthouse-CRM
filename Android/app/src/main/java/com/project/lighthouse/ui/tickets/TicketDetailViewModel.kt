@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.lighthouse.data.model.TicketDto
+import com.project.lighthouse.data.repository.JiraRepository
 import com.project.lighthouse.data.repository.TicketsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,7 @@ import java.util.Locale
 
 class TicketDetailViewModel(
     private val ticketsRepository: TicketsRepository,
+    private val jiraRepository: JiraRepository,
     private val ticketId: String,
     private val currentUserName: String = "Current User"
 ) : ViewModel() {
@@ -223,6 +225,33 @@ class TicketDetailViewModel(
 
     fun updateSelectedStatus(status: String) {
         _state.update { it.copy(selectedStatus = status) }
+    }
+
+    fun createJiraIssue() {
+        viewModelScope.launch {
+            Log.d(TAG, "Creating Jira issue for ticket: $ticketId")
+            _state.update { it.copy(isCreatingJiraIssue = true, errorMessage = null) }
+            val result = jiraRepository.createIssueForTicket(ticketId)
+            result.onSuccess { response ->
+                Log.d(TAG, "Jira issue created: ${response.issueKey}")
+                // Reload ticket to get updated jiraIssueKey and jiraIssueUrl
+                loadTicket()
+                _state.update {
+                    it.copy(
+                        isCreatingJiraIssue = false,
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to create Jira issue: ${error.message}", error)
+                _state.update {
+                    it.copy(
+                        isCreatingJiraIssue = false,
+                        errorMessage = error.message ?: "Failed to create Jira issue"
+                    )
+                }
+            }
+        }
     }
 
     fun dismissMessage() {

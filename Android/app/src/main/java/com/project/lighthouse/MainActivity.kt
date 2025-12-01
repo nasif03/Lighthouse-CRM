@@ -344,24 +344,38 @@ class MainActivity : ComponentActivity() {
                                     onUpdateStatus = { id, status -> leadsViewModel.updateLeadStatus(id, status) },
                                     onConvertLead = { leadsViewModel.convertLead(it) },
                                     onDeleteLead = { leadsViewModel.deleteLead(it) },
-                                    onDismissMessage = { leadsViewModel.dismissMessage() }
+                                    onDismissMessage = { leadsViewModel.dismissMessage() },
+                                    onNavigateToAccount = { accountId ->
+                                        leadsViewModel.clearConvertedEntities()
+                                        navController.navigate("account_detail/$accountId")
+                                    }
                                 )
                             }
 
                             composable(MainDestination.Contacts.route) {
                                 val contactsViewModel = viewModel<ContactsViewModel>(
-                                    factory = ContactsViewModelFactory(AppModule.getContactsRepository(applicationContext))
+                                    factory = ContactsViewModelFactory(
+                                        AppModule.getContactsRepository(applicationContext),
+                                        AppModule.getAccountsRepository(applicationContext)
+                                    )
                                 )
                                 val contactsState by contactsViewModel.state.collectAsStateWithLifecycle()
+                                
+                                // Auto-refresh on entry to show newly created contacts from lead conversion
+                                LaunchedEffect(Unit) {
+                                    contactsViewModel.refreshContacts()
+                                }
 
                                 ContactsScreen(
                                     state = contactsState,
                                     onRefresh = { contactsViewModel.refreshContacts() },
                                     onCreateContact = { contactsViewModel.createContact() },
-                                    onUpdateForm = { first, last, email, phone, title ->
-                                        contactsViewModel.updateForm(first, last, email, phone, title)
+                                    onUpdateForm = { first, last, email, phone, title, accountId, tags ->
+                                        contactsViewModel.updateForm(first, last, email, phone, title, accountId, tags)
                                     },
                                     onToggleDialog = { contactsViewModel.toggleCreateDialog(it) },
+                                    onToggleEditDialog = { show, contact -> contactsViewModel.toggleEditDialog(show, contact) },
+                                    onUpdateContact = { contactsViewModel.updateContact() },
                                     onDeleteContact = { contactsViewModel.deleteContact(it) },
                                     onDismissMessage = { contactsViewModel.dismissMessage() }
                                 )
@@ -372,6 +386,11 @@ class MainActivity : ComponentActivity() {
                                     factory = AccountsViewModelFactory(AppModule.getAccountsRepository(applicationContext))
                                 )
                                 val accountsState by accountsViewModel.state.collectAsStateWithLifecycle()
+                                
+                                // Auto-refresh on entry to show newly created accounts from lead conversion
+                                LaunchedEffect(Unit) {
+                                    accountsViewModel.refreshAccounts()
+                                }
 
                                 AccountsScreen(
                                     state = accountsState,
@@ -413,16 +432,32 @@ class MainActivity : ComponentActivity() {
 
                             composable(MainDestination.Deals.route) {
                                 val dealsViewModel = viewModel<DealsViewModel>(
-                                    factory = DealsViewModelFactory(AppModule.getDealsRepository(applicationContext))
+                                    factory = DealsViewModelFactory(
+                                        AppModule.getDealsRepository(applicationContext),
+                                        AppModule.getAccountsRepository(applicationContext),
+                                        AppModule.getContactsRepository(applicationContext)
+                                    )
                                 )
                                 val dealsState by dealsViewModel.state.collectAsStateWithLifecycle()
+                                
+                                // Auto-refresh on entry to show newly created deals from lead conversion
+                                LaunchedEffect(Unit) {
+                                    dealsViewModel.refreshDeals()
+                                }
 
                                 DealsScreen(
                                     state = dealsState,
                                     onRefresh = { dealsViewModel.refreshDeals() },
                                     onCreateDeal = { dealsViewModel.createDeal() },
-                                    onUpdateForm = { name, amount, stage -> dealsViewModel.updateForm(name, amount, stage) },
+                                    onUpdateForm = { name, amount, stage, accountId, contactId ->
+                                        dealsViewModel.updateForm(name, amount, stage, accountId, contactId)
+                                    },
+                                    onUpdateEditForm = { name, amount, stage, accountId, contactId ->
+                                        dealsViewModel.updateEditForm(name, amount, stage, accountId, contactId)
+                                    },
                                     onToggleDialog = { dealsViewModel.toggleCreateDialog(it) },
+                                    onToggleEditDialog = { show, deal -> dealsViewModel.toggleEditDialog(show, deal) },
+                                    onUpdateDeal = { dealsViewModel.updateDeal() },
                                     onUpdateStage = { id, stageId, stageName -> dealsViewModel.updateDealStage(id, stageId, stageName) },
                                     onDeleteDeal = { dealsViewModel.deleteDeal(it) },
                                     onDismissMessage = { dealsViewModel.dismissMessage() }
@@ -767,6 +802,10 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onCreateTicket = { ticketsViewModel.createTicket(it) },
                                     onToggleUpdateDialog = { show, ticket -> ticketsViewModel.toggleUpdateDialog(show, ticket) },
+                                    onToggleSelection = { ticketsViewModel.toggleTicketSelection(it) },
+                                    onClearSelection = { ticketsViewModel.clearSelection() },
+                                    onBulkAssign = { ticketsViewModel.bulkAssign(it) },
+                                    onBulkClose = { ticketsViewModel.bulkClose() },
                                     onUpdateTicket = { ticketId, status, priority, assignedTo, category ->
                                         ticketsViewModel.updateTicket(ticketId, status, priority, assignedTo, category)
                                     },
@@ -787,6 +826,7 @@ class MainActivity : ComponentActivity() {
                                     val ticketDetailViewModel = viewModel<TicketDetailViewModel>(
                                         factory = TicketDetailViewModelFactory(
                                             AppModule.getTicketsRepository(applicationContext),
+                                            AppModule.getJiraRepository(applicationContext),
                                             ticketId,
                                             authState.user?.name ?: "User"
                                         )
@@ -806,6 +846,7 @@ class MainActivity : ComponentActivity() {
                                         onToggleStatusModal = { ticketDetailViewModel.toggleStatusModal(it) },
                                         onUpdateSelectedAssignee = { ticketDetailViewModel.updateSelectedAssignee(it) },
                                         onUpdateSelectedStatus = { ticketDetailViewModel.updateSelectedStatus(it) },
+                                        onCreateJiraIssue = { ticketDetailViewModel.createJiraIssue() },
                                     onNavigateBack = { navController.popBackStack() },
                                     onDismissMessage = { ticketDetailViewModel.dismissMessage() }
                                 )

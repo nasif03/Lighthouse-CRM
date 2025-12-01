@@ -29,6 +29,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -85,6 +87,10 @@ fun TicketsScreen(
     onNavigateToCreateTicket: () -> Unit,
     onDismissMessage: () -> Unit,
     onViewDetails: (String) -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAssign: (String?) -> Unit,
+    onBulkClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -119,13 +125,11 @@ fun TicketsScreen(
             )
         },
         floatingActionButton = {
-            if (orgId != null) {
-                FloatingActionButton(onClick = onNavigateToCreateTicket) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_leads),
-                        contentDescription = "Create Ticket"
-                    )
-                }
+            FloatingActionButton(onClick = onNavigateToCreateTicket) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_leads),
+                    contentDescription = "Create Ticket"
+                )
             }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -185,9 +189,13 @@ fun TicketsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Stats Dashboard
+                // Stats Dashboard (clickable to filter)
                 item {
-                    com.project.lighthouse.ui.tickets.TicketStatsDashboard(stats = stats)
+                    com.project.lighthouse.ui.tickets.TicketStatsDashboard(
+                        stats = stats,
+                        currentFilterStatus = state.filterStatus,
+                        onStatusClick = { status -> onSetFilter(status, state.filterPriority) }
+                    )
                 }
                 
                 // Search and Filters
@@ -208,6 +216,20 @@ fun TicketsScreen(
                     }
                 }
 
+                // Bulk actions bar (shown when tickets are selected and user is admin)
+                if (state.isAdmin && state.selectedTicketIds.isNotEmpty()) {
+                    item {
+                        BulkActionsBar(
+                            selectedCount = state.selectedTicketIds.size,
+                            assignableEmployees = state.assignableEmployees,
+                            isProcessing = state.isBulkActionInProgress,
+                            onBulkAssign = onBulkAssign,
+                            onBulkClose = onBulkClose,
+                            onClearSelection = onClearSelection
+                        )
+                    }
+                }
+
                 // Use a stable, unique key per ticket to avoid LazyColumn key collisions.
                 // Backend guarantees ticketNumber uniqueness, so prefer that over id.
                 items(filteredTickets, key = { it.ticketNumber }) { ticket ->
@@ -215,6 +237,7 @@ fun TicketsScreen(
                         ticket = ticket,
                         isAdmin = state.isAdmin,
                         assignableEmployees = state.assignableEmployees,
+                        isSelected = state.selectedTicketIds.contains(ticket.id),
                         onUpdate = { status, priority, assignedTo, category ->
                             onUpdateTicket(ticket.id, status, priority, assignedTo, category)
                         },
@@ -227,7 +250,8 @@ fun TicketsScreen(
                             }
                         },
                         onToggleUpdateDialog = { onToggleUpdateDialog(true, ticket) },
-                        onViewDetails = { onViewDetails(ticket.id) }
+                        onViewDetails = { onViewDetails(ticket.id) },
+                        onToggleSelection = if (state.isAdmin) { { onToggleSelection(ticket.id) } } else null
                     )
                 }
             }
@@ -276,7 +300,14 @@ private fun TicketFilters(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = currentStatus ?: "All Statuses",
+                    text = when (currentStatus) {
+                        null -> "All"
+                        "open" -> "Open"
+                        "in_progress" -> "In Progress"
+                        "resolved" -> "Resolved"
+                        "closed" -> "Closed"
+                        else -> currentStatus.replaceFirstChar { it.titlecase() }
+                    },
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -287,21 +318,40 @@ private fun TicketFilters(
                 onDismissRequest = { statusExpanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("All Statuses", fontSize = 12.sp) },
+                    text = { Text("All", fontSize = 12.sp) },
                     onClick = {
                         onSetFilter(null, currentPriority)
                         statusExpanded = false
                     }
                 )
-                ticketStatuses.forEach { status ->
-                    DropdownMenuItem(
-                        text = { Text(status.replaceFirstChar { it.titlecase() }, fontSize = 12.sp) },
-                        onClick = {
-                            onSetFilter(status, currentPriority)
-                            statusExpanded = false
-                        }
-                    )
-                }
+                DropdownMenuItem(
+                    text = { Text("Open", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter("open", currentPriority)
+                        statusExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("In Progress", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter("in_progress", currentPriority)
+                        statusExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Resolved", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter("resolved", currentPriority)
+                        statusExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Closed", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter("closed", currentPriority)
+                        statusExpanded = false
+                    }
+                )
             }
         }
 
@@ -312,7 +362,14 @@ private fun TicketFilters(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = currentPriority ?: "All Priorities",
+                    text = when (currentPriority) {
+                        null -> "All"
+                        "urgent" -> "Urgent"
+                        "high" -> "High"
+                        "medium" -> "Medium"
+                        "low" -> "Low"
+                        else -> currentPriority.replaceFirstChar { it.titlecase() }
+                    },
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -323,21 +380,40 @@ private fun TicketFilters(
                 onDismissRequest = { priorityExpanded = false }
             ) {
                 DropdownMenuItem(
-                    text = { Text("All Priorities", fontSize = 12.sp) },
+                    text = { Text("All", fontSize = 12.sp) },
                     onClick = {
                         onSetFilter(currentStatus, null)
                         priorityExpanded = false
                     }
                 )
-                ticketPriorities.forEach { priority ->
-                    DropdownMenuItem(
-                        text = { Text(priority.replaceFirstChar { it.titlecase() }, fontSize = 12.sp) },
-                        onClick = {
-                            onSetFilter(currentStatus, priority)
-                            priorityExpanded = false
-                        }
-                    )
-                }
+                DropdownMenuItem(
+                    text = { Text("Urgent", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter(currentStatus, "urgent")
+                        priorityExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("High", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter(currentStatus, "high")
+                        priorityExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Medium", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter(currentStatus, "medium")
+                        priorityExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Low", fontSize = 12.sp) },
+                    onClick = {
+                        onSetFilter(currentStatus, "low")
+                        priorityExpanded = false
+                    }
+                )
             }
         }
     }
@@ -348,20 +424,40 @@ private fun TicketCard(
     ticket: TicketDto,
     isAdmin: Boolean,
     assignableEmployees: List<com.project.lighthouse.data.model.AssignableEmployee>,
+    isSelected: Boolean = false,
     onUpdate: (String?, String?, String?, String?) -> Unit,
     onOpenJira: (String) -> Unit,
     onToggleUpdateDialog: () -> Unit,
-    onViewDetails: () -> Unit
+    onViewDetails: () -> Unit,
+    onToggleSelection: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onViewDetails),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.White
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Selection checkbox (admin only)
+            if (isAdmin && onToggleSelection != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelection() }
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            
             // Ticket number and subject
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -481,6 +577,70 @@ private fun CreateTicketDialog(
                     maxLines = 8,
                     modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Priority selector
+                var priorityExpanded by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(
+                        onClick = { priorityExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = state.priority.replaceFirstChar { it.titlecase() },
+                            fontSize = 13.sp
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = priorityExpanded,
+                        onDismissRequest = { priorityExpanded = false }
+                    ) {
+                        ticketPriorities.forEach { priority ->
+                            DropdownMenuItem(
+                                text = { Text(priority.replaceFirstChar { it.titlecase() }, fontSize = 12.sp) },
+                                onClick = {
+                                    onFieldChange(null, null, null, null, null, priority, null)
+                                    priorityExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Category selector
+                var categoryExpanded by remember { mutableStateOf(false) }
+                val ticketCategories = listOf("technical", "billing", "account", "feature_request", "bug_report", "feedback", "other")
+                Box {
+                    OutlinedButton(
+                        onClick = { categoryExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = state.category?.replace("_", " ")?.replaceFirstChar { it.titlecase() } ?: "Select category (optional)",
+                            fontSize = 13.sp
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("None", fontSize = 12.sp) },
+                            onClick = {
+                                onFieldChange(null, null, null, null, null, null, null)
+                                categoryExpanded = false
+                            }
+                        )
+                        ticketCategories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.replace("_", " ").replaceFirstChar { it.titlecase() }, fontSize = 12.sp) },
+                                onClick = {
+                                    onFieldChange(null, null, null, null, null, null, category)
+                                    categoryExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -494,6 +654,97 @@ private fun CreateTicketDialog(
             }
         }
     )
+}
+
+@Composable
+private fun BulkActionsBar(
+    selectedCount: Int,
+    assignableEmployees: List<com.project.lighthouse.data.model.AssignableEmployee>,
+    isProcessing: Boolean,
+    onBulkAssign: (String?) -> Unit,
+    onBulkClose: () -> Unit,
+    onClearSelection: () -> Unit
+) {
+    var showAssignDialog by remember { mutableStateOf(false) }
+    
+    WebStyleCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "$selectedCount ticket(s) selected",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { showAssignDialog = true },
+                    enabled = !isProcessing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Assign", fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onBulkClose,
+                    enabled = !isProcessing,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Gray600)
+                ) {
+                    Text("Close", fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = onClearSelection,
+                    enabled = !isProcessing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Clear", fontSize = 12.sp)
+                }
+            }
+        }
+    }
+    
+    if (showAssignDialog) {
+        AlertDialog(
+            onDismissRequest = { showAssignDialog = false },
+            title = { Text("Assign Tickets") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            onBulkAssign(null)
+                            showAssignDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Unassigned")
+                    }
+                    assignableEmployees.forEach { employee ->
+                        TextButton(
+                            onClick = {
+                                onBulkAssign(employee.id)
+                                showAssignDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(employee.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAssignDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -629,4 +880,3 @@ private fun UpdateTicketDialog(
         }
     )
 }
-
