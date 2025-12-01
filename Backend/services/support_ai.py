@@ -1,254 +1,425 @@
-"""Support AI helper service with MCP tool integration."""
-from __future__ import annotations
-
-from typing import Dict, List, Optional, Any
-import httpx
+"""Support AI service using Gemini API with MCP tool integration"""
+import os
 import json
+import inspect
+from typing import Optional, List, Dict, Any, Callable
+from datetime import datetime
+from bson import ObjectId
+from google import genai
 
-from config.settings import (
-    SUPPORT_AI_API_KEY,
-    SUPPORT_AI_MODEL,
-    SUPPORT_AI_BASE_URL,
-    SUPPORT_AI_SYSTEM_PROMPT,
+from config.database import support_chat_messages_collection
+from config.settings import SUPER_ADMIN_EMAIL
+from utils.permissions import has_permission, is_super_admin
+
+# Initialize Gemini client
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBEawA5f5Bj65MkKAkyHZ8EmYzCegb6FDw")
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Import all MCP tools
+from mcp_server.tools.leads import (
+    create_lead,
+    get_leads,
+    update_lead_status,
+    convert_lead_to_deal,
+    delete_lead,
 )
 
-# Import MCP tools
-import sys
-from pathlib import Path
-backend_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_dir))
-
-import importlib.util
-spec = importlib.util.spec_from_file_location("mcp_tools", backend_dir / "mcp-crm" / "tools" / "__init__.py")
-mcp_tools = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mcp_tools)
-
-DEFAULT_SYSTEM_PROMPT = (
-    "You are Lighthouse CRM's virtual support specialist. "
-    "You have access to tools to query and manage CRM data. "
-    "Available tools include: get_leads, get_contacts, get_deals, get_accounts, get_tickets, get_dashboard_stats, get_analytics, "
-    "create_lead, create_contact, create_deal, create_account, create_ticket, and more. "
-    "When users ask about CRM data, ALWAYS use the appropriate tools to get real information. "
-    "Never make up or guess data - always query the database using tools. "
-    "If you need to call a tool, use the function calling format. "
-    "Provide concise, actionable answers based on the actual data you retrieve."
+from mcp_server.tools.deals import (
+    create_deal,
+    get_deals,
+    update_deal,
+    delete_deal,
 )
 
-class SupportAIError(Exception):
-    """Domain-specific error for support assistant issues."""
+from mcp_server.tools.tickets import (
+    create_ticket,
+    get_tickets,
+    get_ticket,
+    update_ticket,
+    get_assignable_employees,
+)
 
-def convert_mcp_tool_to_openai_function(mcp_tool) -> Dict[str, Any]:
-    """Convert MCP Tool to OpenAI function format."""
-    return {
-        "type": "function",
-        "function": {
-            "name": mcp_tool.name,
-            "description": mcp_tool.description,
-            "parameters": mcp_tool.inputSchema
-        }
-    }
+from mcp_server.tools.calendar import (
+    create_meeting,
+    get_meetings,
+)
 
-async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any], user_context: Dict[str, str]) -> str:
-    """Call an MCP tool handler directly."""
-    handler = mcp_tools.TOOL_HANDLERS.get(tool_name)
-    if not handler:
-        available_tools = ", ".join(sorted(mcp_tools.TOOL_HANDLERS.keys())[:10])
-        return f"Error: Tool '{tool_name}' not found. Available tools include: {available_tools} (and more)."
+from mcp_server.tools.admin import (
+    get_organizations,
+    create_organization,
+    update_organization,
+    get_employees,
+    create_employee,
+    update_employee,
+    remove_employee,
+    get_roles,
+    create_role,
+    update_role,
+    delete_role,
+)
+
+# Map tool names to functions
+MCP_TOOLS: Dict[str, Callable] = {
+    # Leads
+    "create_lead": create_lead,
+    "get_leads": get_leads,
+    "update_lead_status": update_lead_status,
+    "convert_lead_to_deal": convert_lead_to_deal,
+    "delete_lead": delete_lead,
     
-    # Inject user context into arguments
-    arguments["context"] = user_context
+    # Deals
+    "create_deal": create_deal,
+    "get_deals": get_deals,
+    "update_deal": update_deal,
+    "delete_deal": delete_deal,
     
-    try:
-        result = await handler(**arguments)
-        # Format result nicely
-        if isinstance(result, dict):
-            return json.dumps(result, indent=2)
-        elif isinstance(result, list):
-            return json.dumps(result, indent=2)
+    # Tickets
+    "create_ticket": create_ticket,
+    "get_tickets": get_tickets,
+    "get_ticket": get_ticket,
+    "update_ticket": update_ticket,
+    "get_assignable_employees": get_assignable_employees,
+    
+    # Calendar
+    "create_meeting": create_meeting,
+    "get_meetings": get_meetings,
+    
+    # Admin
+    "get_organizations": get_organizations,
+    "create_organization": create_organization,
+    "update_organization": update_organization,
+    "get_employees": get_employees,
+    "create_employee": create_employee,
+    "update_employee": update_employee,
+    "remove_employee": remove_employee,
+    "get_roles": get_roles,
+    "create_role": create_role,
+    "update_role": update_role,
+    "delete_role": delete_role,
+}
+
+# Permission mappings for tools
+TOOL_PERMISSIONS: Dict[str, List[str]] = {
+    "create_lead": ["write:leads"],
+    "get_leads": ["read:leads"],
+    "update_lead_status": ["write:leads"],
+    "convert_lead_to_deal": ["write:leads", "write:deals"],
+    "delete_lead": ["write:leads"],
+    
+    "create_deal": ["write:deals"],
+    "get_deals": ["read:deals"],
+    "update_deal": ["write:deals"],
+    "delete_deal": ["write:deals"],
+    
+    "create_ticket": [],  # Public endpoint
+    "get_tickets": ["read:tickets"],
+    "get_ticket": ["read:tickets"],
+    "update_ticket": ["write:tickets"],
+    "get_assignable_employees": ["read:tickets"],
+    
+    "create_meeting": ["write:calendar"],
+    "get_meetings": ["read:calendar"],
+    
+    "get_organizations": [],  # User can see their own orgs
+    "create_organization": [],  # Anyone can create org
+    "update_organization": ["admin:organizations"],
+    "get_employees": ["read:employees"],
+    "create_employee": ["admin:employees"],
+    "update_employee": ["admin:employees"],
+    "remove_employee": ["admin:employees"],
+    "get_roles": ["read:roles"],
+    "create_role": ["admin:roles"],
+    "update_role": ["admin:roles"],
+    "delete_role": ["admin:roles"],
+}
+
+
+def get_tool_schema(tool_name: str, tool_func: Callable) -> Dict[str, Any]:
+    """Generate Gemini function calling schema from a tool function"""
+    sig = inspect.signature(tool_func)
+    doc = inspect.getdoc(tool_func) or ""
+    
+    properties = {}
+    required = []
+    
+    for param_name, param in sig.parameters.items():
+        if param_name == "auth_token":
+            continue  # Skip auth_token, we'll inject it
+        
+        param_type = param.annotation
+        if param_type == inspect.Parameter.empty:
+            param_type = str
+        
+        # Convert Python types to JSON schema types
+        if param_type == str or param_type == Optional[str]:
+            json_type = "string"
+        elif param_type == int or param_type == Optional[int]:
+            json_type = "integer"
+        elif param_type == float or param_type == Optional[float]:
+            json_type = "number"
+        elif param_type == bool or param_type == Optional[bool]:
+            json_type = "boolean"
+        elif param_type == list or param_type == List[str] or param_type == Optional[List[str]]:
+            json_type = "array"
+            properties[param_name] = {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": f"{param_name} parameter"
+            }
+            if param.default == inspect.Parameter.empty:
+                required.append(param_name)
+            continue
         else:
-            return str(result)
-    except Exception as e:
-        import traceback
-        error_details = str(e)
-        return f"Error executing {tool_name}: {error_details}"
-
-async def generate_support_response(
-    user_message: str,
-    history: Optional[List[Dict[str, str]]] = None,
-    metadata: Optional[Dict[str, str]] = None,
-) -> str:
-    """Call LLM with function calling support for MCP tools."""
-    if not SUPPORT_AI_API_KEY:
-        raise SupportAIError("Support assistant is not configured. Please contact an administrator.")
-
-    api_base = SUPPORT_AI_BASE_URL.rstrip("/") if SUPPORT_AI_BASE_URL else "https://api.openai.com/v1"
-    model = SUPPORT_AI_MODEL or "gpt-4o-mini"
-    system_prompt = SUPPORT_AI_SYSTEM_PROMPT or DEFAULT_SYSTEM_PROMPT
-
-    # Get MCP tools and convert to OpenAI format
-    mcp_tool_list = mcp_tools.get_all_tools()
-    functions = [convert_mcp_tool_to_openai_function(tool) for tool in mcp_tool_list]
-    
-    # Build list of available tool names for the prompt
-    available_tool_names = [tool.name for tool in mcp_tool_list]
-    tool_list_text = ", ".join(available_tool_names[:20])  # Limit to first 20 to avoid token bloat
-    
-    # Enhance system prompt with available tools
-    enhanced_system_prompt = f"{system_prompt}\n\nAvailable tools: {tool_list_text}"
-
-    messages: List[Dict[str, Any]] = [{"role": "system", "content": enhanced_system_prompt}]
-    
-    # Include limited history
-    trimmed_history = (history or [])[-6:]
-    for turn in trimmed_history:
-        role = turn.get("role")
-        content = (turn.get("content") or "").strip()
-        if role in {"user", "assistant"} and content:
-            messages.append({"role": role, "content": content})
-
-    metadata_text = ""
-    if metadata:
-        user_name = metadata.get("userName")
-        org_name = metadata.get("orgName")
-        metadata_text = f" (User: {user_name}, Org: {org_name})"
-
-    messages.append({"role": "user", "content": f"{user_message.strip()}{metadata_text}"})
-
-    # User context for MCP tools
-    user_context = {
-        "userEmail": metadata.get("userEmail", "") if metadata else "",
-        "orgId": metadata.get("orgId", "") if metadata else "",
-    }
-
-    # Function calling loop (max 3 iterations to avoid infinite loops)
-    max_iterations = 3
-    for iteration in range(max_iterations):
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.2,
-            "max_tokens": 1000,
+            json_type = "string"
+        
+        prop = {
+            "type": json_type,
+            "description": f"{param_name} parameter"
         }
         
-        # Add functions if available
-        if functions:
-            payload["tools"] = functions
-            payload["tool_choice"] = "auto"
-
-        headers = {
-            "Authorization": f"Bearer {SUPPORT_AI_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(f"{api_base}/chat/completions", json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                choices = data.get("choices") or []
-                if not choices:
-                    raise SupportAIError("Support assistant returned an empty response.")
-                
-                message = choices[0].get("message", {})
-                content = (message.get("content") or "").strip()
-                
-                # Check for OpenAI-style function calls first
-                tool_calls = message.get("tool_calls")
-                
-                # Fallback: Parse JSON tool calls from content (for Ollama compatibility)
-                if not tool_calls and content:
-                    # Try to extract JSON tool calls from the text - look for patterns like {"name": "...", "parameters": {...}}
-                    import re
-                    # More flexible pattern to catch JSON objects with name and parameters
-                    json_pattern = r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"parameters"\s*:\s*(\{[^}]*\}|{})\s*\}'
-                    json_matches = re.findall(json_pattern, content)
-                    if json_matches:
-                        tool_calls = []
-                        for idx, (tool_name, params_str) in enumerate(json_matches):
-                            if tool_name and tool_name in mcp_tools.TOOL_HANDLERS:
-                                try:
-                                    tool_params = json.loads(params_str) if params_str.strip() != "{}" else {}
-                                    tool_calls.append({
-                                        "id": f"call_{iteration}_{idx}",
-                                        "function": {
-                                            "name": tool_name,
-                                            "arguments": json.dumps(tool_params)
-                                        }
-                                    })
-                                except json.JSONDecodeError:
-                                    # Try to parse as string if it's not valid JSON
-                                    tool_params = {}
-                                    tool_calls.append({
-                                        "id": f"call_{iteration}_{idx}",
-                                        "function": {
-                                            "name": tool_name,
-                                            "arguments": json.dumps(tool_params)
-                                        }
-                                    })
-                    else:
-                        # Try to find JSON objects anywhere in the content
-                        try:
-                            # Look for standalone JSON objects
-                            json_obj_pattern = r'\{\s*"name"\s*:\s*"[^"]+"\s*[^}]*\}'
-                            matches = re.findall(json_obj_pattern, content)
-                            for idx, match in enumerate(matches):
-                                try:
-                                    tool_call_data = json.loads(match)
-                                    tool_name = tool_call_data.get("name")
-                                    if tool_name and tool_name in mcp_tools.TOOL_HANDLERS:
-                                        tool_params = tool_call_data.get("parameters", {})
-                                        tool_calls.append({
-                                            "id": f"call_{iteration}_{idx}",
-                                            "function": {
-                                                "name": tool_name,
-                                                "arguments": json.dumps(tool_params)
-                                            }
-                                        })
-                                except (json.JSONDecodeError, AttributeError):
-                                    continue
-                        except Exception:
-                            pass
-                
-                if tool_calls:
-                    # Add assistant message with tool calls
-                    messages.append(message)
-                    
-                    # Execute all tool calls
-                    for tool_call in tool_calls:
-                        tool_name = tool_call.get("function", {}).get("name")
-                        tool_args_str = tool_call.get("function", {}).get("arguments", "{}")
-                        
-                        # Parse arguments
-                        try:
-                            tool_args = json.loads(tool_args_str) if isinstance(tool_args_str, str) else tool_args_str
-                        except json.JSONDecodeError:
-                            tool_args = {}
-                        
-                        tool_call_id = tool_call.get("id", f"call_{iteration}_{tool_name}")
-                        
-                        # Call the MCP tool
-                        tool_result = await call_mcp_tool(tool_name, tool_args, user_context)
-                        
-                        # Add tool result to messages
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "content": tool_result
-                        })
-                    
-                    # Continue loop to get final response
-                    continue
-                else:
-                    # No function calls - return the text response
-                    if not content:
-                        raise SupportAIError("Support assistant could not generate a reply. Please try again.")
-                    return content
-                    
-        except httpx.HTTPStatusError as exc:
-            error_detail = exc.response.text if exc.response is not None else str(exc)
-            raise SupportAIError(f"Support assistant error: {error_detail}") from exc
-        except httpx.HTTPError as exc:
-            raise SupportAIError("Unable to reach the support assistant service. Please try again.") from exc
+        if param.default != inspect.Parameter.empty:
+            prop["default"] = param.default
+        else:
+            required.append(param_name)
+        
+        properties[param_name] = prop
     
-    # If we exhausted iterations, return a message
-    return "I've processed your request using the available tools. If you need more information, please ask a specific question."
+    return {
+        "name": tool_name,
+        "description": doc.split("\n\n")[0] if doc else f"{tool_name} function",
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": required
+        }
+    }
+
+
+def check_tool_permission(tool_name: str, user_doc: dict, org_id: str) -> bool:
+    """Check if user has permission to use a tool"""
+    required_perms = TOOL_PERMISSIONS.get(tool_name, [])
+    
+    # Super admin bypasses all checks
+    if is_super_admin(user_doc):
+        return True
+    
+    # Public endpoints (empty permission list)
+    if not required_perms:
+        return True
+    
+    # Check permissions
+    return has_permission(user_doc, org_id, required_perms)
+
+
+async def call_mcp_tool(tool_name: str, args: Dict[str, Any], auth_token: str) -> Any:
+    """Call an MCP tool with arguments"""
+    if tool_name not in MCP_TOOLS:
+        raise ValueError(f"Unknown tool: {tool_name}")
+    
+    tool_func = MCP_TOOLS[tool_name]
+    
+    # Inject auth_token into args
+    args_with_auth = {**args, "auth_token": auth_token}
+    
+    # Call the tool
+    if inspect.iscoroutinefunction(tool_func):
+        return await tool_func(**args_with_auth)
+    else:
+        return tool_func(**args_with_auth)
+
+
+async def process_support_chat(
+    user_message: str,
+    conversation_id: Optional[str],
+    user_id: str,
+    org_id: str,
+    user_doc: dict,
+    auth_token: str,
+) -> tuple[str, str]:
+    """
+    Process a support chat message using Gemini with MCP tool integration.
+    
+    Returns:
+        tuple: (reply_text, conversation_id)
+    """
+    # Load conversation history
+    history = []
+    if conversation_id:
+        messages = list(
+            support_chat_messages_collection.find(
+                {"conversationId": conversation_id}
+            ).sort("createdAt", 1)
+        )
+        for msg in messages:
+            history.append({
+                "role": msg["role"],
+                "parts": [{"text": msg["content"]}]
+            })
+    
+    # Add user message to history
+    history.append({
+        "role": "user",
+        "parts": [{"text": user_message}]
+    })
+    
+    # Generate tool schemas for available tools (filter by permissions)
+    available_tools = []
+    tool_schemas = []
+    for tool_name in MCP_TOOLS.keys():
+        if check_tool_permission(tool_name, user_doc, org_id):
+            tool_func = MCP_TOOLS[tool_name]
+            schema = get_tool_schema(tool_name, tool_func)
+            available_tools.append(tool_name)
+            tool_schemas.append(schema)
+    
+    # System prompt
+    system_prompt = """You are Support AI, an intelligent assistant for Lighthouse CRM. 
+You can help users with:
+- CRM operations (leads, deals, contacts, accounts)
+- Jira/JSM ticket management
+- Calendar and meeting scheduling
+- Organization and employee management
+- General questions about the system
+
+When users ask you to perform actions, use the available tools. Always explain what you're doing in a friendly, helpful manner.
+If a user doesn't have permission for a requested action, politely explain that you cannot perform that action due to permissions.
+
+Be concise but thorough. Format responses clearly with proper structure."""
+    
+    try:
+        # Build conversation context
+        conversation_text = ""
+        
+        # Add conversation history
+        for msg in history:
+            role = msg.get("role", "user")
+            parts = msg.get("parts", [])
+            text = ""
+            
+            for part in parts:
+                if isinstance(part, dict) and "text" in part:
+                    text += part["text"]
+                elif isinstance(part, str):
+                    text += part
+            
+            if role == "user":
+                conversation_text += f"User: {text}\n"
+            elif role == "assistant" or role == "model":
+                conversation_text += f"Assistant: {text}\n"
+        
+        # Build tools description
+        tools_description = "\n\nYou have access to these MCP tools:\n"
+        for tool_name in available_tools[:10]:  # Limit to first 10 to avoid token limits
+            tool_func = MCP_TOOLS[tool_name]
+            doc = inspect.getdoc(tool_func) or ""
+            first_line = doc.split("\n")[0] if doc else tool_name
+            tools_description += f"- {tool_name}: {first_line}\n"
+        
+        # Build full prompt
+        full_prompt = f"""{system_prompt}
+
+{tools_description}
+
+{conversation_text}User: {user_message}
+
+Assistant:"""
+        
+        # Generate response with Gemini (format matching user's example)
+        try:
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=full_prompt
+            )
+            
+            # Extract response text
+            if hasattr(response, "text") and response.text:
+                final_reply = response.text
+            elif response and hasattr(response, "candidates"):
+                # Try to extract from candidates structure
+                if response.candidates and len(response.candidates) > 0:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                        text_parts = []
+                        for part in candidate.content.parts:
+                            if hasattr(part, "text"):
+                                text_parts.append(part.text)
+                        final_reply = " ".join(text_parts) if text_parts else "I apologize, but I couldn't generate a response."
+                    else:
+                        final_reply = str(candidate) if candidate else "I apologize, but I couldn't generate a response."
+                else:
+                    final_reply = "I apologize, but I couldn't generate a response."
+            else:
+                final_reply = str(response) if response else "I apologize, but I couldn't generate a response."
+        except Exception as e:
+            print(f"Gemini API error: {str(e)}")
+            final_reply = f"I encountered an error while processing your request: {str(e)}. Please try again."
+        
+        # TODO: Implement full function calling with Gemini's native support
+        # For now, this provides conversational AI assistance
+        
+        # Create or update conversation
+        if not conversation_id:
+            conversation_id = str(ObjectId())
+        
+        # Save messages to database
+        timestamp = datetime.utcnow()
+        
+        # Save user message
+        support_chat_messages_collection.insert_one({
+            "conversationId": conversation_id,
+            "userId": user_id,
+            "orgId": org_id,
+            "role": "user",
+            "content": user_message,
+            "createdAt": timestamp
+        })
+        
+        # Save assistant reply
+        support_chat_messages_collection.insert_one({
+            "conversationId": conversation_id,
+            "userId": user_id,
+            "orgId": org_id,
+            "role": "assistant",
+            "content": final_reply,
+            "createdAt": timestamp
+        })
+        
+        return final_reply, conversation_id
+        
+    except Exception as e:
+        error_msg = f"I encountered an error: {str(e)}. Please try again or contact support."
+        print(f"Support AI error: {str(e)}")
+        return error_msg, conversation_id or str(ObjectId())
+
+
+def get_conversation_history(conversation_id: str, user_id: str, org_id: str) -> List[Dict[str, Any]]:
+    """Get conversation history from database"""
+    messages = list(
+        support_chat_messages_collection.find({
+            "conversationId": conversation_id,
+            "userId": user_id,
+            "orgId": org_id
+        }).sort("createdAt", 1)
+    )
+    
+    result = []
+    for msg in messages:
+        result.append({
+            "id": str(msg["_id"]),
+            "role": msg["role"],
+            "content": msg["content"],
+            "createdAt": msg["createdAt"].isoformat() if isinstance(msg["createdAt"], datetime) else str(msg["createdAt"])
+        })
+    
+    return result
+
+
+def get_or_create_conversation_id(user_id: str, org_id: str) -> Optional[str]:
+    """Get the most recent conversation ID for a user, or None if no conversation exists"""
+    latest = support_chat_messages_collection.find_one(
+        {"userId": user_id, "orgId": org_id},
+        sort=[("createdAt", -1)]
+    )
+    
+    return latest["conversationId"] if latest else None
+
