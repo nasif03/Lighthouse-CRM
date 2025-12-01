@@ -200,7 +200,7 @@ async def get_tickets(
                     "url": f"{JIRA_SERVER}/browse/{jira_key}"
                 }
         
-        # Get customer metadata for all tickets
+        # Get customer and assignment metadata for all tickets
         ticket_metadata_list = list(ticket_metadata_collection.find({"jsmIssueKey": {"$in": ticket_keys}}))
         metadata_map = {}
         for meta in ticket_metadata_list:
@@ -213,18 +213,23 @@ async def get_tickets(
         for jsm_ticket in paginated_tickets:
             ticket_key = jsm_ticket["key"]
             
-            # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
-            metadata = metadata_map.get(ticket_key, {})
+            # Get customer metadata and stored assignment from MongoDB (preferred),
+            # or fallback to JSM reporter / JSM mapping when metadata is missing.
+            metadata = metadata_map.get(ticket_key, {}) or {}
             customer_name = metadata.get("customerName") or jsm_ticket.get("reporterName", "")
             customer_email = metadata.get("customerEmail") or jsm_ticket.get("reporterEmail", "")
             customer_phone = metadata.get("customerPhone")
             customer_category = metadata.get("category")
-            
-            # Map assignee account ID to user ID (simplified - may return None)
-            assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
-            assignee_name = None
-            if assignee_user_id:
-                assignee_name = get_assigned_user_name(assignee_user_id)
+
+            # Preferred source of assignment: what we stored in Mongo (set by update_ticket)
+            assignee_user_id = metadata.get("assignedTo")
+            assignee_name = metadata.get("assignedToName")
+
+            # Fallback: derive from JSM if no stored assignment
+            if not assignee_user_id and jsm_ticket.get("assigneeAccountId"):
+                assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
+                if assignee_user_id:
+                    assignee_name = get_assigned_user_name(assignee_user_id)
             
             # Jira link: Use JSM ticket key as the primary link, or Jira Software issue if linked
             jira_software_key = jira_map.get(ticket_key, {}).get("key")
@@ -393,13 +398,7 @@ async def get_ticket(
         #             detail="You can only view tickets assigned to you."
         #         )
         
-        # Get assigned user name if assigned
-        assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
-        assigned_to_name = None
-        if assignee_user_id:
-            assigned_to_name = get_assigned_user_name(assignee_user_id)
-        
-        # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
+        # Get customer metadata and stored assignment from MongoDB (preferred)
         from config.settings import JIRA_SERVER
         from config.database import ticket_metadata_collection
         metadata = ticket_metadata_collection.find_one({"jsmIssueKey": ticket_id})
@@ -407,6 +406,16 @@ async def get_ticket(
         customer_email = metadata.get("customerEmail") if metadata else None
         customer_phone = metadata.get("customerPhone") if metadata else None
         customer_category = metadata.get("category") if metadata else None
+
+        # Preferred assignment source: what we stored in Mongo (set by update_ticket)
+        assignee_user_id = metadata.get("assignedTo") if metadata else None
+        assigned_to_name = metadata.get("assignedToName") if metadata else None
+
+        # Fallback: try to derive assignment from JSM if nothing is stored
+        if not assignee_user_id and jsm_ticket.get("assigneeAccountId"):
+            assignee_user_id = get_user_id_from_jsm_account_id(jsm_ticket.get("assigneeAccountId"), org_id)
+            if assignee_user_id:
+                assigned_to_name = get_assigned_user_name(assignee_user_id)
         
         # Use customer metadata if available, otherwise fallback to JSM reporter
         final_name = customer_name or jsm_ticket.get("reporterName", "")
@@ -514,8 +523,9 @@ async def update_ticket(
                 detail="Only administrators can assign or reassign tickets."
             )
         
-        # Validate assignedTo if provided (admin only)
+        # Validate assignedTo if provided (admin only) and prepare Jira assignee accountId
         assignee_account_id = None
+        employee = None
         if request.assignedTo and user_is_admin:
             # Verify the employee exists
             employee = users_collection.find_one({"_id": ObjectId(request.assignedTo)})
@@ -540,10 +550,10 @@ async def update_ticket(
                     detail="This employee does not have ticket permissions. Please assign them a role with ticket permissions (read:tickets or write:tickets) first."
                 )
             
-            # Get JSM account ID for the employee
+            # Get JSM account ID for the employee (best-effort for Jira)
             assignee_account_id = get_jsm_account_id_from_user_id(request.assignedTo)
         
-        # Update ticket in JSM
+        # Update ticket in JSM (status/priority/assignee in Jira) - best-effort
         updated_jsm_ticket = update_jsm_service_request(
             issue_key=ticket_id,
             status=request.status,
@@ -554,20 +564,55 @@ async def update_ticket(
         if not updated_jsm_ticket:
             raise HTTPException(status_code=500, detail="Failed to update ticket in JSM")
         
-        # Get assigned user name if assigned
-        assignee_user_id = get_user_id_from_jsm_account_id(updated_jsm_ticket.get("assigneeAccountId"), org_id)
-        assigned_to_name = None
-        if assignee_user_id:
-            assigned_to_name = get_assigned_user_name(assignee_user_id)
-        
-        # Get customer metadata from MongoDB (preferred) or fallback to JSM reporter
+        # Get customer metadata and existing assignment from MongoDB (preferred)
         from config.settings import JIRA_SERVER
         from config.database import ticket_metadata_collection
-        metadata = ticket_metadata_collection.find_one({"jsmIssueKey": ticket_id})
+        metadata = ticket_metadata_collection.find_one({"jsmIssueKey": ticket_id}) or {}
         customer_name = metadata.get("customerName") if metadata else None
         customer_email = metadata.get("customerEmail") if metadata else None
         customer_phone = metadata.get("customerPhone") if metadata else None
         customer_category = metadata.get("category") if metadata else None
+
+        # Determine CRM-side assignment based on the incoming request:
+        # - If assignedTo is present (even if null), that becomes the new CRM assignment.
+        # - Otherwise, keep existing metadata assignment.
+        assignee_user_id = None
+        assigned_to_name = None
+
+        assignment_field_sent = "assignedTo" in request.__fields_set__
+
+        if assignment_field_sent:
+            if request.assignedTo:
+                assignee_user_id = request.assignedTo
+                # Prefer using the employee document we already fetched
+                if employee:
+                    assigned_to_name = employee.get("name") or get_assigned_user_name(assignee_user_id)
+                else:
+                    assigned_to_name = get_assigned_user_name(assignee_user_id)
+            else:
+                # Explicit unassign
+                assignee_user_id = None
+                assigned_to_name = None
+
+            from datetime import datetime
+            now = datetime.utcnow()
+            ticket_metadata_collection.update_one(
+                {"jsmIssueKey": ticket_id},
+                {
+                    "$set": {
+                        "jsmIssueKey": ticket_id,
+                        "orgId": org_id,
+                        "assignedTo": assignee_user_id,
+                        "assignedToName": assigned_to_name,
+                        "updatedAt": now
+                    }
+                },
+                upsert=True
+            )
+        else:
+            # No explicit CRM assignment change; keep any existing metadata assignment
+            assignee_user_id = metadata.get("assignedTo")
+            assigned_to_name = metadata.get("assignedToName")
         
         # Use customer metadata if available, otherwise fallback to JSM reporter
         final_name = customer_name or updated_jsm_ticket.get("reporterName", "")
