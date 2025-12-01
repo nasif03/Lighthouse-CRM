@@ -198,25 +198,6 @@ fun SettingsScreen(
                 }
             }
             
-            // Organizations List
-            if (state.organizations.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Your Organizations",
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = Gray900,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                items(
-                    state.organizations,
-                    key = { org -> "org-${org.id}" }
-                ) { org ->
-                    OrganizationItem(org)
-                }
-            }
-            
             // Tenants List
             state.tenants?.let { tenantList ->
                 item {
@@ -239,32 +220,6 @@ fun SettingsScreen(
                         onSwitch = { onSwitchTenant(tenant.id) }
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OrganizationItem(org: OrganizationResponse) {
-    WebStyleCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = org.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = Gray900,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            org.domain?.takeIf { it.isNotBlank() }?.let {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    color = Gray500,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
