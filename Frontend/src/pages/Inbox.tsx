@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import { useInboxStore } from '../store/inboxStore';
 import InboxSidebar from '../components/inbox/InboxSidebar';
-import StreamConversationView from '../components/inbox/StreamConversationView';
-import { Chat } from 'stream-chat-react';
+import { CustomMessageList, CustomMessageInput } from '../components/inbox/StreamConversationView';
+import { Chat, Channel } from 'stream-chat-react';
 import { useStreamChat } from '../hooks/useStreamChat';
 import StreamAudioCallManager from '../components/inbox/calls/StreamAudioCallManager';
 import StreamAudioCallButton from '../components/inbox/calls/StreamAudioCallButton';
@@ -9,6 +10,8 @@ import StreamAudioCallButton from '../components/inbox/calls/StreamAudioCallButt
 export default function Inbox() {
   const { activeConversationId, setActiveConversation, conversations } = useInboxStore();
   const { client, isLoading } = useStreamChat();
+  const [channel, setChannel] = useState<any>(null);
+  const [channelError, setChannelError] = useState<string | null>(null);
 
   const handleBack = () => {
     setActiveConversation(null);
@@ -24,6 +27,43 @@ export default function Inbox() {
     : null;
   const otherMember = conversation?.participantName || 'Unknown';
 
+  const hasChannelInfo = !!(conversation?.channelType && conversation?.channelId);
+
+  // Initialize and watch the channel
+  useEffect(() => {
+    if (!client || !hasChannelInfo || !conversation) {
+      setChannel(null);
+      return;
+    }
+
+    setChannelError(null);
+    const newChannel = client.channel(conversation.channelType!, conversation.channelId!);
+    
+    const timeout = setTimeout(() => {
+      setChannelError('Channel loading timeout. Please try again.');
+    }, 10000);
+
+    newChannel.watch()
+      .then(() => {
+        clearTimeout(timeout);
+        setChannel(newChannel);
+      })
+      .catch((error: any) => {
+        clearTimeout(timeout);
+        console.error('Error watching channel:', error);
+        setChannelError(error.message || 'Failed to load channel');
+      });
+
+    return () => {
+      clearTimeout(timeout);
+      try {
+        newChannel.stopWatching();
+      } catch (e) {
+        // Ignore errors
+      }
+    };
+  }, [client, hasChannelInfo, conversation?.channelType, conversation?.channelId]);
+
   return (
     <>
       <div className="h-full flex gap-4">
@@ -36,8 +76,8 @@ export default function Inbox() {
         <div className="flex-1 min-w-0 h-full flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
           {activeConversationId ? (
             <>
-              {/* Chat Header - showing who you're chatting with + back button */}
-              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
+              {/* PART 1: Header - Fixed at top */}
+              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleBack}
@@ -72,25 +112,42 @@ export default function Inbox() {
                 )}
               </div>
 
-              {/* Messages Area - Scrollable */}
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                {client ? (
+              {/* PART 2: Messages Area - Scrollable, separate container */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {client && channel ? (
                   <Chat client={client}>
-                    <div className="h-full flex flex-col min-h-0">
-                      <StreamConversationView />
-                    </div>
+                    <Channel channel={channel}>
+                      <CustomMessageList />
+                    </Channel>
                   </Chat>
-                ) : isLoading ? (
-                  <div className="flex-1 flex items-center justify-center h-full">
+                ) : isLoading || !client ? (
+                  <div className="h-full flex items-center justify-center">
                     <div className="text-gray-500">Loading chat...</div>
                   </div>
+                ) : channelError ? (
+                  <div className="h-full flex items-center justify-center p-4">
+                    <div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded p-4">
+                      {channelError}
+                    </div>
+                  </div>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center h-full p-4">
+                  <div className="h-full flex items-center justify-center p-4">
                     <div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded p-4">
                       Chat client not ready. Please wait a moment and try again.
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* PART 3: Input Area - Fixed at bottom, separate container */}
+              <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+                {client && channel ? (
+                  <Chat client={client}>
+                    <Channel channel={channel}>
+                      <CustomMessageInput />
+                    </Channel>
+                  </Chat>
+                ) : null}
               </div>
             </>
           ) : (

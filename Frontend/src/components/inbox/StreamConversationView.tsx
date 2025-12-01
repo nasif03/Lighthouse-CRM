@@ -32,13 +32,12 @@ function CustomMessage({ message }: { message: any }) {
 }
 
 // Custom message list
-function CustomMessageList() {
-  const channelState = useChannelStateContext() as { messages?: any[] };
+export function CustomMessageList() {
+  const channelState = useChannelStateContext() as { messages?: any[]; channel?: any };
   const messages = channelState.messages ?? [];
+  const channelId = channelState.channel?.id || channelState.channel?.cid || '';
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasScrolledRef = useRef<string | null>(null);
 
   // Sort messages by created_at to ensure chronological order (oldest first)
   const sortedMessages = [...messages].sort((a: any, b: any) => {
@@ -47,77 +46,25 @@ function CustomMessageList() {
     return timeA - timeB;
   });
 
-  // Auto-scroll to bottom on new messages (unless user is scrolling)
+  // Reset scroll flag when channel changes
   useEffect(() => {
-    if (!isUserScrolling && messagesEndRef.current && messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
-      // Only auto-scroll if user is near the bottom (within 100px)
-      const isNearBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-      if (isNearBottom) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+    if (channelId && hasScrolledRef.current !== channelId) {
+      hasScrolledRef.current = null;
     }
-  }, [sortedMessages.length, isUserScrolling]);
+  }, [channelId]);
 
-  // Detect user scrolling
+  // Auto-scroll to bottom only the first time messages load for this channel
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      setIsUserScrolling(true);
-      
-      // Clear existing timeout
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      
-      // Check if user scrolled to bottom
-      const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-      
-      // If user scrolled to bottom, allow auto-scroll immediately
-      if (isAtBottom) {
-        setIsUserScrolling(false);
-        // Clear timeout since we're at bottom
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-        }
-      } else {
-        // User is scrolling up - prevent auto-scroll
-        // Reset scrolling flag after 3 seconds of no scrolling
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-        }
-        scrollTimeoutRef.current = setTimeout(() => {
-          setIsUserScrolling(false);
-        }, 3000);
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
+    if (sortedMessages.length > 0 && channelId && hasScrolledRef.current !== channelId && messagesEndRef.current) {
+      hasScrolledRef.current = channelId;
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [sortedMessages.length, channelId]);
 
   return (
-    <div 
-      ref={messagesContainerRef}
-      className="messages-list"
-      style={{
-        flex: 1,
-        padding: '10px',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        position: 'relative',
-        minHeight: 0,
-        height: '100%',
-        width: '100%'
-      }}
-    >
+    <div className="p-4">
       {sortedMessages.map((message: any) => (
         <CustomMessage key={message.id} message={message} />
       ))}
@@ -127,7 +74,7 @@ function CustomMessageList() {
 }
 
 // Custom message input
-function CustomMessageInput() {
+export function CustomMessageInput() {
   const [inputValue, setInputValue] = useState('');
   const { sendMessage } = useChannelActionContext();
 
@@ -146,16 +93,11 @@ function CustomMessageInput() {
 
   return (
     <div 
-      className="chat-input"
+      className="chat-input flex-shrink-0 border-t border-gray-200 bg-white"
       style={{
-        padding: '10px',
-        borderTop: '1px solid #ccc',
-        background: 'white',
-        position: 'static',
-        height: 'auto',
+        padding: '12px 16px',
         display: 'flex',
-        gap: '8px',
-        flexShrink: 0
+        gap: '8px'
       }}
     >
       <Input
@@ -336,7 +278,7 @@ export default function StreamConversationView() {
     >
       {/* Stream Chat Channel - Messages area (scrollable) */}
       <Channel channel={channel}>
-        <div 
+        <div   
           className="flex-1 flex flex-col min-h-0 overflow-hidden"
           style={{
             display: 'flex',
