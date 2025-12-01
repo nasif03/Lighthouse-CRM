@@ -1,148 +1,153 @@
-"""In-app support chat API routes."""
-from __future__ import annotations
-
-from typing import List, Literal, Optional
-from uuid import uuid4
-from datetime import datetime
+"""Support Chat API routes with MCP tool integration"""
+from fastapi import APIRouter, HTTPException, Depends, Request
+from pydantic import BaseModel
+from typing import Optional, List
 from bson import ObjectId
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-
 from api.dependencies import get_current_user
-from services.support_ai import generate_support_response, SupportAIError
-from config.database import support_chat_messages_collection
+from services.support_ai import (
+    process_support_chat,
+    get_conversation_history,
+    get_or_create_conversation_id,
+)
 
-
-class ChatTurn(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(..., min_length=1, max_length=2000)
+router = APIRouter(prefix="/api/support-chat", tags=["support-chat"])
 
 
 class SupportChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
+    message: str
     conversationId: Optional[str] = None
-    history: Optional[List[ChatTurn]] = None
 
 
 class SupportChatResponse(BaseModel):
     reply: str
     conversationId: str
 
-class SupportChatMessage(BaseModel):
+
+class ChatMessage(BaseModel):
     id: str
-    role: Literal["user", "assistant"]
+    role: str
     content: str
     createdAt: str
 
+
 class SupportChatHistoryResponse(BaseModel):
     conversationId: str
-    messages: List[SupportChatMessage]
-
-
-router = APIRouter(prefix="/api/support-chat", tags=["support-chat"])
+    messages: List[ChatMessage]
 
 
 @router.post("", response_model=SupportChatResponse)
-async def support_chat(
-    payload: SupportChatRequest,
-    current_user: dict = Depends(get_current_user),
-) -> SupportChatResponse:
-    """Handle support chat requests by proxying to the Support AI service."""
-    user_doc = current_user.get("user_doc") or {}
-    user_id = str(user_doc.get("_id", ""))
-    org_id = str(user_doc.get("activeOrgId") or user_doc.get("orgId") or "")
-    
-    # Generate conversation ID: one conversation per user per org
-    conversation_id = payload.conversationId or f"{user_id}_{org_id}"
-    
-    metadata = {
-        "userEmail": current_user.get("email", ""),
-        "userName": user_doc.get("name", "Unknown User"),
-        "orgId": org_id,
-        "orgName": user_doc.get("activeOrgName") or user_doc.get("orgName") or "",
-    }
-
-    # Load conversation history from database
-    history_messages = list(
-        support_chat_messages_collection.find(
-            {"conversationId": conversation_id, "orgId": org_id}
-        ).sort("createdAt", 1).limit(20)  # Last 20 messages for context
-    )
-    
-    # Convert to format expected by support_ai
-    history = [
-        {"role": msg["role"], "content": msg["content"]}
-        for msg in history_messages
-    ]
-
+async def send_message(
+    request: SupportChatRequest,
+    request_obj: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Send a message to Support AI and get a response.
+    The AI can use MCP tools to perform actions based on user permissions.
+    """
     try:
-        reply = await generate_support_response(
-            user_message=payload.message,
-            history=history,
-            metadata=metadata,
+        user_doc = current_user["user_doc"]
+        user_id = str(user_doc["_id"])
+        email = current_user["email"]
+        
+        # Get active organization
+        org_ids = user_doc.get("orgId", [])
+        if isinstance(org_ids, str):
+            org_ids = [org_ids]
+        
+        active_org_id = user_doc.get("activeOrgId")
+        if not active_org_id and org_ids:
+            active_org_id = org_ids[0]
+        
+        if not active_org_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No active organization found. Please set an active organization."
+            )
+        
+        # Extract the Firebase token from the Authorization header
+        auth_token = None
+        if request_obj:
+            auth_header = request_obj.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                auth_token = auth_header[7:]  # Remove "Bearer " prefix
+        
+        # Process the chat message
+        reply, conversation_id = await process_support_chat(
+            user_message=request.message,
+            conversation_id=request.conversationId,
+            user_id=user_id,
+            org_id=active_org_id,
+            user_doc=user_doc,
+            auth_token=auth_token,
         )
         
-        # Save user message to database
-        user_message_doc = {
-            "conversationId": conversation_id,
-            "orgId": org_id,
-            "userId": user_id,
-            "role": "user",
-            "content": payload.message,
-            "createdAt": datetime.utcnow(),
-        }
-        support_chat_messages_collection.insert_one(user_message_doc)
+        return SupportChatResponse(
+            reply=reply,
+            conversationId=conversation_id
+        )
         
-        # Save assistant reply to database
-        assistant_message_doc = {
-            "conversationId": conversation_id,
-            "orgId": org_id,
-            "userId": user_id,
-            "role": "assistant",
-            "content": reply,
-            "createdAt": datetime.utcnow(),
-        }
-        support_chat_messages_collection.insert_one(assistant_message_doc)
-        
-        return SupportChatResponse(reply=reply, conversationId=conversation_id)
-    except SupportAIError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Support assistant is currently unavailable.") from exc
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Support chat error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process message: {str(e)}"
+        )
 
 
 @router.get("/history", response_model=SupportChatHistoryResponse)
-async def get_support_chat_history(
+async def get_history(
     conversationId: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
-) -> SupportChatHistoryResponse:
-    """Get conversation history for Support AI chat."""
-    user_doc = current_user.get("user_doc") or {}
-    user_id = str(user_doc.get("_id", ""))
-    org_id = str(user_doc.get("activeOrgId") or user_doc.get("orgId") or "")
-    
-    # Use provided conversationId or generate default (one per user per org)
-    conversation_id = conversationId or f"{user_id}_{org_id}"
-    
-    # Load messages from database
-    messages = list(
-        support_chat_messages_collection.find(
-            {"conversationId": conversation_id, "orgId": org_id}
-        ).sort("createdAt", 1)
-    )
-    
-    return SupportChatHistoryResponse(
-        conversationId=conversation_id,
-        messages=[
-            SupportChatMessage(
-                id=str(msg["_id"]),
-                role=msg["role"],
-                content=msg["content"],
-                createdAt=msg["createdAt"].isoformat() if isinstance(msg["createdAt"], datetime) else str(msg["createdAt"]),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get conversation history for the current user"""
+    try:
+        user_doc = current_user["user_doc"]
+        user_id = str(user_doc["_id"])
+        
+        # Get active organization
+        org_ids = user_doc.get("orgId", [])
+        if isinstance(org_ids, str):
+            org_ids = [org_ids]
+        
+        active_org_id = user_doc.get("activeOrgId")
+        if not active_org_id and org_ids:
+            active_org_id = org_ids[0]
+        
+        if not active_org_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No active organization found."
             )
-            for msg in messages
-        ]
-    )
-
+        
+        # Get conversation ID
+        if not conversationId:
+            conversationId = get_or_create_conversation_id(user_id, active_org_id)
+        
+        if not conversationId:
+            # No conversation history
+            return SupportChatHistoryResponse(
+                conversationId="",
+                messages=[]
+            )
+        
+        # Get messages
+        messages = get_conversation_history(conversationId, user_id, active_org_id)
+        
+        return SupportChatHistoryResponse(
+            conversationId=conversationId,
+            messages=[ChatMessage(**msg) for msg in messages]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Get history error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get history: {str(e)}"
+        )
 
