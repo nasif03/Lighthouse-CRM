@@ -11,6 +11,7 @@ from services.firebase import initialize_firebase
 from api.routes import auth, leads, contacts, accounts, deals, activities, tenants, tickets, dashboard, organizations, employees, roles, jira, gmail, chat, support_chat
 from api.routes.fireflies_routes import router as fireflies_router
 from api.routes import calendar_routes
+from telegram_bot import init_telegram_bot, shutdown_telegram_bot, telegram_webhook
 
 # Initialize FastAPI app
 app = FastAPI(title="Lighthouse CRM Backend")
@@ -62,6 +63,24 @@ app.include_router(fireflies_router)
 app.include_router(calendar_routes.router)
 app.include_router(chat.router)
 app.include_router(support_chat.router)
+
+# Telegram webhook route
+app.add_api_route(
+    "/telegram_webhook",
+    telegram_webhook,
+    methods=["POST"],
+    name="telegram_webhook",
+)
+
+# Startup event for Telegram bot
+@app.on_event("startup")
+async def startup_telegram():
+    await init_telegram_bot()
+
+# Shutdown event for Telegram bot
+@app.on_event("shutdown")
+async def shutdown_telegram():
+    await shutdown_telegram_bot()
 
 if __name__ == "__main__":
     uvicorn.run(app, host=HOST, port=PORT)
