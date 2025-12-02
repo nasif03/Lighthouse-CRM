@@ -1,6 +1,7 @@
 """Support AI service using Gemini API with MCP tool integration"""
 import os
 import json
+import re
 import inspect
 from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime
@@ -238,12 +239,13 @@ async def process_support_chat(
 ) -> tuple[str, str]:
     """
     Process a support chat message using Gemini with MCP tool integration.
+    Implements full function calling: Gemini can call tools, we execute them, and feed results back.
     
     Returns:
         tuple: (reply_text, conversation_id)
     """
     # Load conversation history
-    history = []
+    conversation_history = []
     if conversation_id:
         messages = list(
             support_chat_messages_collection.find(
@@ -251,29 +253,25 @@ async def process_support_chat(
             ).sort("createdAt", 1)
         )
         for msg in messages:
-            history.append({
-                "role": msg["role"],
+            # Convert to Gemini message format
+            role = "user" if msg["role"] == "user" else "model"
+            conversation_history.append({
+                "role": role,
                 "parts": [{"text": msg["content"]}]
             })
     
-    # Add user message to history
-    history.append({
-        "role": "user",
-        "parts": [{"text": user_message}]
-    })
-    
     # Generate tool schemas for available tools (filter by permissions)
     available_tools = []
-    tool_schemas = []
+    function_declarations = []
     for tool_name in MCP_TOOLS.keys():
         if check_tool_permission(tool_name, user_doc, org_id):
             tool_func = MCP_TOOLS[tool_name]
             schema = get_tool_schema(tool_name, tool_func)
             available_tools.append(tool_name)
-            tool_schemas.append(schema)
+            function_declarations.append(schema)
     
-    # System prompt
-    system_prompt = """You are Support AI, an intelligent assistant for Lighthouse CRM. 
+    # System instruction
+    system_instruction = """You are Support AI, an intelligent assistant for Lighthouse CRM. 
 You can help users with:
 - CRM operations (leads, deals, contacts, accounts)
 - Jira/JSM ticket management
@@ -281,90 +279,24 @@ You can help users with:
 - Organization and employee management
 - General questions about the system
 
-When users ask you to perform actions, use the available tools. Always explain what you're doing in a friendly, helpful manner.
+When users ask you to perform actions, use the available function calling tools. Always explain what you're doing in a friendly, helpful manner.
 If a user doesn't have permission for a requested action, politely explain that you cannot perform that action due to permissions.
 
 Be concise but thorough. Format responses clearly with proper structure."""
     
     try:
-        # Build conversation context
-        conversation_text = ""
-        
-        # Add conversation history
-        for msg in history:
-            role = msg.get("role", "user")
-            parts = msg.get("parts", [])
-            text = ""
-            
-            for part in parts:
-                if isinstance(part, dict) and "text" in part:
-                    text += part["text"]
-                elif isinstance(part, str):
-                    text += part
-            
-            if role == "user":
-                conversation_text += f"User: {text}\n"
-            elif role == "assistant" or role == "model":
-                conversation_text += f"Assistant: {text}\n"
-        
-        # Build tools description
-        tools_description = "\n\nYou have access to these MCP tools:\n"
-        for tool_name in available_tools[:10]:  # Limit to first 10 to avoid token limits
-            tool_func = MCP_TOOLS[tool_name]
-            doc = inspect.getdoc(tool_func) or ""
-            first_line = doc.split("\n")[0] if doc else tool_name
-            tools_description += f"- {tool_name}: {first_line}\n"
-        
-        # Build full prompt
-        full_prompt = f"""{system_prompt}
-
-{tools_description}
-
-{conversation_text}User: {user_message}
-
-Assistant:"""
-        
-        # Generate response with Gemini (format matching user's example)
-        try:
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=full_prompt
-            )
-            
-            # Extract response text
-            if hasattr(response, "text") and response.text:
-                final_reply = response.text
-            elif response and hasattr(response, "candidates"):
-                # Try to extract from candidates structure
-                if response.candidates and len(response.candidates) > 0:
-                    candidate = response.candidates[0]
-                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                        text_parts = []
-                        for part in candidate.content.parts:
-                            if hasattr(part, "text"):
-                                text_parts.append(part.text)
-                        final_reply = " ".join(text_parts) if text_parts else "I apologize, but I couldn't generate a response."
-                    else:
-                        final_reply = str(candidate) if candidate else "I apologize, but I couldn't generate a response."
-                else:
-                    final_reply = "I apologize, but I couldn't generate a response."
-            else:
-                final_reply = str(response) if response else "I apologize, but I couldn't generate a response."
-        except Exception as e:
-            print(f"Gemini API error: {str(e)}")
-            final_reply = f"I encountered an error while processing your request: {str(e)}. Please try again."
-        
-        # TODO: Implement full function calling with Gemini's native support
-        # For now, this provides conversational AI assistance
-        
         # Create or update conversation
         if not conversation_id:
             conversation_id = str(ObjectId())
         
-        # Save messages to database
-        timestamp = datetime.utcnow()
+        # Add user message to conversation
+        conversation_history.append({
+            "role": "user",
+            "parts": [{"text": user_message}]
+        })
         
-        # Save user message
+        # Save user message to database
+        timestamp = datetime.utcnow()
         support_chat_messages_collection.insert_one({
             "conversationId": conversation_id,
             "userId": user_id,
@@ -374,21 +306,253 @@ Assistant:"""
             "createdAt": timestamp
         })
         
-        # Save assistant reply
+        # Prepare tools for Gemini (function declarations)
+        # Note: The Google GenAI SDK may not support 'tools' parameter directly
+        # We'll use a hybrid approach: describe tools in prompt and use structured output
+        
+        # Maximum iterations to prevent infinite loops
+        max_iterations = 5
+        iteration = 0
+        final_reply = None
+        
+        while iteration < max_iterations:
+            iteration += 1
+            
+            try:
+                # Build tools description for the prompt
+                tools_description = ""
+                if function_declarations:
+                    tools_description = "\n\nAvailable tools you can use:\n"
+                    for tool_schema in function_declarations[:15]:  # Limit to avoid token limits
+                        tool_name = tool_schema.get("name", "")
+                        tool_desc = tool_schema.get("description", "")
+                        params = tool_schema.get("parameters", {}).get("properties", {})
+                        required = tool_schema.get("parameters", {}).get("required", [])
+                        
+                        tools_description += f"\n- {tool_name}: {tool_desc}\n"
+                        if params:
+                            tools_description += "  Parameters:\n"
+                            for param_name, param_info in params.items():
+                                param_type = param_info.get("type", "string")
+                                param_desc = param_info.get("description", "")
+                                req_marker = " (required)" if param_name in required else ""
+                                tools_description += f"    - {param_name} ({param_type}){req_marker}: {param_desc}\n"
+                    
+                    tools_description += "\nWhen you want to use a tool, respond in this exact JSON format:\n"
+                    tools_description += '{"tool_call": {"name": "tool_name", "args": {"param1": "value1", "param2": "value2"}}}\n'
+                    tools_description += "Otherwise, respond normally with text.\n"
+                
+                # Build conversation text from history
+                conversation_text = ""
+                for msg in conversation_history:
+                    role = msg.get("role", "user")
+                    parts = msg.get("parts", [])
+                    text = ""
+                    for part in parts:
+                        if isinstance(part, dict) and "text" in part:
+                            text += part["text"]
+                        elif isinstance(part, str):
+                            text += part
+                    
+                    if role == "user":
+                        conversation_text += f"User: {text}\n"
+                    elif role == "model" or role == "assistant":
+                        conversation_text += f"Assistant: {text}\n"
+                
+                # Build full prompt with system instruction, tools, and conversation embedded
+                full_prompt = f"""{system_instruction}
+
+{tools_description}
+
+{conversation_text}"""
+                
+                # Call Gemini with simple parameters only (no system_instruction or tools kwargs)
+                response = gemini_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=full_prompt
+                )
+                
+                # Extract response text
+                response_text = ""
+                if hasattr(response, "text") and response.text:
+                    response_text = response.text
+                elif hasattr(response, "candidates") and response.candidates:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                        text_parts = []
+                        for part in candidate.content.parts:
+                            if hasattr(part, "text"):
+                                text_parts.append(part.text)
+                        response_text = " ".join(text_parts) if text_parts else ""
+                
+                # Try to parse JSON tool calls from response
+                function_calls = []
+                try:
+                    # Look for JSON blocks in the response
+                    # Try to find JSON starting with { and ending with }
+                    # We'll try to extract the tool_call JSON
+                    json_start = response_text.find('{"tool_call"')
+                    if json_start == -1:
+                        json_start = response_text.find('{"name"')
+                    
+                    if json_start != -1:
+                        # Find the matching closing brace
+                        brace_count = 0
+                        json_end = json_start
+                        for i in range(json_start, len(response_text)):
+                            if response_text[i] == '{':
+                                brace_count += 1
+                            elif response_text[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                        
+                        if json_end > json_start:
+                            json_str = response_text[json_start:json_end]
+                            tool_call_json = json.loads(json_str)
+                            
+                            # Check if it's wrapped in tool_call
+                            if "tool_call" in tool_call_json:
+                                function_calls.append(tool_call_json["tool_call"])
+                            # Or if it's directly a tool call object with name and args
+                            elif "name" in tool_call_json and "args" in tool_call_json:
+                                function_calls.append(tool_call_json)
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                    print(f"[Support AI] Could not parse tool call JSON: {str(e)}")
+                    pass
+                
+                # If there are function calls, execute them
+                if function_calls:
+                    # Add model's response to conversation (showing what it wanted to do)
+                    conversation_history.append({
+                        "role": "model",
+                        "parts": [{"text": response_text}]
+                    })
+                    
+                    # Execute each function call
+                    function_results = []
+                    for func_call in function_calls:
+                        # Parse function name and arguments from JSON format
+                        func_name = None
+                        func_args = {}
+                        
+                        if isinstance(func_call, dict):
+                            func_name = func_call.get("name") or func_call.get("function_name", "")
+                            func_args = func_call.get("args", func_call.get("arguments", {}))
+                        elif hasattr(func_call, "name"):
+                            func_name = func_call.name
+                            if hasattr(func_call, "args"):
+                                func_args = func_call.args if isinstance(func_call.args, dict) else {}
+                            elif hasattr(func_call, "arguments"):
+                                func_args = func_call.arguments if isinstance(func_call.arguments, dict) else {}
+                        
+                        if not func_name:
+                            print(f"[Support AI] Warning: Could not parse function name from {func_call}")
+                            continue
+                        
+                        if func_name not in available_tools:
+                            result = {
+                                "name": func_name,
+                                "response": {"error": f"Unknown tool: {func_name}"}
+                            }
+                        else:
+                            try:
+                                # Execute the tool
+                                tool_result = await call_mcp_tool(func_name, func_args, auth_token)
+                                
+                                # Convert result to JSON-serializable format
+                                if isinstance(tool_result, (dict, list, str, int, float, bool, type(None))):
+                                    result_data = tool_result
+                                else:
+                                    result_data = str(tool_result)
+                                
+                                result = {
+                                    "name": func_name,
+                                    "response": result_data
+                                }
+                                print(f"[Support AI] Executed tool {func_name} successfully")
+                            except Exception as e:
+                                print(f"[Support AI] Error executing tool {func_name}: {str(e)}")
+                                result = {
+                                    "name": func_name,
+                                    "response": {"error": f"Tool execution failed: {str(e)}"}
+                                }
+                        
+                        function_results.append(result)
+                    
+                    # Format function results as text for Gemini to understand
+                    results_text = "Tool execution results:\n"
+                    for fr in function_results:
+                        func_name = fr.get("name", "unknown") if isinstance(fr, dict) else "unknown"
+                        func_response = fr.get("response", {}) if isinstance(fr, dict) else fr
+                        
+                        # Format the result nicely
+                        if isinstance(func_response, dict):
+                            if "error" in func_response:
+                                results_text += f"\n{func_name}: ERROR - {func_response['error']}\n"
+                            else:
+                                results_text += f"\n{func_name}: SUCCESS\n{json.dumps(func_response, indent=2)}\n"
+                        else:
+                            results_text += f"\n{func_name}: {json.dumps(func_response)}\n"
+                    
+                    results_text += "\nPlease provide a helpful response to the user based on these results."
+                    
+                    # Add function results back to conversation as user message
+                    conversation_history.append({
+                        "role": "user",
+                        "parts": [{"text": results_text}]
+                    })
+                    
+                    # Continue loop to get final response from Gemini
+                    continue
+                
+                # No function calls - use the response text as final reply
+                if response_text:
+                    final_reply = response_text
+                    break
+                else:
+                    # If no text response, try to extract from response object
+                    if hasattr(response, "text") and response.text:
+                        final_reply = response.text
+                        break
+                    elif hasattr(response, "candidates") and response.candidates:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                            text_parts = []
+                            for part in candidate.content.parts:
+                                if hasattr(part, "text"):
+                                    text_parts.append(part.text)
+                            final_reply = " ".join(text_parts) if text_parts else None
+                            if final_reply:
+                                break
+                    
+            except Exception as e:
+                print(f"[Support AI] Gemini API error (iteration {iteration}): {str(e)}")
+                if iteration == 1:
+                    # First iteration failed - return error
+                    final_reply = f"I encountered an error while processing your request: {str(e)}. Please try again."
+                break
+        
+        # If we still don't have a reply after all iterations
+        if not final_reply:
+            final_reply = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+        
+        # Save assistant reply to database
         support_chat_messages_collection.insert_one({
             "conversationId": conversation_id,
             "userId": user_id,
             "orgId": org_id,
             "role": "assistant",
             "content": final_reply,
-            "createdAt": timestamp
+            "createdAt": datetime.utcnow()
         })
         
         return final_reply, conversation_id
         
     except Exception as e:
         error_msg = f"I encountered an error: {str(e)}. Please try again or contact support."
-        print(f"Support AI error: {str(e)}")
+        print(f"[Support AI] Error: {str(e)}")
         return error_msg, conversation_id or str(ObjectId())
 
 
