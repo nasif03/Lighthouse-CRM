@@ -9,6 +9,11 @@ cd frontend
 npm install 
 npm run dev
  
+curl -X POST "https://api.telegram.org/bot8326777419:AAHtAd_g-nRUfOCCqNaX3ghgY2PJ7SVjBXg/setWebhook?url=https://6cab9727c08f.ngrok-free.app/telegram_webhook"
+
+curl "https://api.telegram.org/bot8326777419:AAHtAd_g-nRUfOCCqNaX3ghgY2PJ7SVjBXg/getWebhookInfo"
+
+
 
 
 

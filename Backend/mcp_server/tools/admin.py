@@ -319,6 +319,53 @@ async def delete_role(
     return response.json()
 
 
+# Tenant/Organization Switching Tools
+async def get_tenants(
+    auth_token: Optional[str] = None,
+) -> dict:
+    """Get all organizations (tenants) the user belongs to and the active tenant. Use this when users ask: "Which organization am I in?", "What organizations do I belong to?", "Show me my organizations", "What is my current organization?", or similar questions about their organization/tenant context.
+    
+    Args:
+        auth_token: Firebase authentication token (required)
+    
+    Returns:
+        Dictionary with tenants list and activeTenantId
+    """
+    url = f"{API_BASE_URL}/api/tenants"
+    
+    response = await http_client.get(
+        url,
+        headers=get_auth_headers(auth_token)
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+async def switch_tenant(
+    tenant_id: str,
+    auth_token: Optional[str] = None,
+) -> dict:
+    """Switch the active organization (tenant) for the current user. Use this when users ask: "Switch to organization X", "Change my organization", "Set active organization to Y", "Switch organization", or want to change their current organization context. First use get_tenants to show available organizations, then use this to switch.
+    
+    Args:
+        tenant_id: ID of the organization to switch to (get this from get_tenants response)
+        auth_token: Firebase authentication token (required)
+    
+    Returns:
+        Success message with the new tenant ID
+    """
+    url = f"{API_BASE_URL}/api/tenants/switch"
+    payload = {"tenant_id": tenant_id}
+    
+    response = await http_client.post(
+        url,
+        json=payload,
+        headers=get_auth_headers(auth_token)
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 # Export tools list for registration
 admin_tools = [
     get_organizations,
@@ -332,5 +379,7 @@ admin_tools = [
     create_role,
     update_role,
     delete_role,
+    get_tenants,
+    switch_tenant,
 ]
 

@@ -74,6 +74,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             auth_token="",  # Empty token - MCP tools will use CRM_API_TOKEN fallback
         )
         
+        # Safeguard: Strip any JSON tool call format that might have leaked through
+        if reply_text:
+            import re
+            stripped = reply_text.strip()
+            # More aggressive detection - check for JSON anywhere in response
+            has_json = (
+                '{"tool_call"' in stripped or 
+                ('{"name"' in stripped and '"args"' in stripped) or
+                ('"tool_call"' in stripped and '"name"' in stripped) or
+                (stripped.startswith('{') and '"name"' in stripped and '"args"' in stripped) or
+                # Check for JSON in the middle of text (like "text... {name: get_leads, args: {}}")
+                ('tool_call' in stripped.lower() and '{' in stripped and '"name"' in stripped) or
+                # Check for JSON blocks with newlines
+                ('\n{' in stripped and '"name"' in stripped and '"args"' in stripped)
+            )
+            
+            if has_json:
+                # Try to extract non-JSON text, or replace entirely
+                # Remove JSON patterns
+                cleaned = re.sub(r'\{[^}]*"tool_call"[^}]*\}|"tool_call"[^}]*\}', '', stripped, flags=re.DOTALL)
+                cleaned = re.sub(r'\{[^}]*"name"[^}]*"args"[^}]*\}', '', cleaned, flags=re.DOTALL)
+                # Also remove standalone "tool_call" text
+                cleaned = re.sub(r'tool_call\s*\n?\s*\{', '', cleaned, flags=re.IGNORECASE)
+                cleaned = cleaned.strip()
+                
+                if cleaned and len(cleaned) > 20:  # If there's substantial non-JSON text, use it
+                    reply_text = cleaned
+                else:
+                    reply_text = "I processed your request, but I'm having trouble formatting the response. Please try asking again or rephrasing your question."
+        
         # Send reply back to Telegram
         # Telegram has a 4096 character limit, so truncate if needed
         if len(reply_text) > 4096:

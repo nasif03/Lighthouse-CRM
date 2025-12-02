@@ -57,6 +57,8 @@ from mcp_server.tools.admin import (
     create_role,
     update_role,
     delete_role,
+    get_tenants,
+    switch_tenant,
 )
 
 # Map tool names to functions
@@ -97,6 +99,8 @@ MCP_TOOLS: Dict[str, Callable] = {
     "create_role": create_role,
     "update_role": update_role,
     "delete_role": delete_role,
+    "get_tenants": get_tenants,
+    "switch_tenant": switch_tenant,
 }
 
 # Permission mappings for tools
@@ -132,6 +136,9 @@ TOOL_PERMISSIONS: Dict[str, List[str]] = {
     "create_role": ["admin:roles"],
     "update_role": ["admin:roles"],
     "delete_role": ["admin:roles"],
+    
+    "get_tenants": [],  # User can see their own tenants
+    "switch_tenant": [],  # User can switch their own tenant
 }
 
 
@@ -185,9 +192,20 @@ def get_tool_schema(tool_name: str, tool_func: Callable) -> Dict[str, Any]:
         
         properties[param_name] = prop
     
+    # Use the first paragraph of the docstring (up to first double newline)
+    description = doc.split("\n\n")[0] if doc else f"{tool_name} function"
+    # If description is very short, try to get more context from the docstring
+    if len(description) < 50 and doc:
+        # Get first two sentences or first paragraph, whichever is longer
+        sentences = doc.split('. ')
+        if len(sentences) > 1:
+            extended_desc = '. '.join(sentences[:2])
+            if len(extended_desc) > len(description):
+                description = extended_desc + ('.' if not extended_desc.endswith('.') else '')
+    
     return {
         "name": tool_name,
-        "description": doc.split("\n\n")[0] if doc else f"{tool_name} function",
+        "description": description,
         "parameters": {
             "type": "object",
             "properties": properties,
@@ -253,6 +271,15 @@ async def process_support_chat(
             ).sort("createdAt", 1)
         )
         for msg in messages:
+            # Skip JSON tool calls in old conversation history (they're internal only)
+            content = msg.get("content", "")
+            if content:
+                stripped = content.strip()
+                # If this message is a JSON tool call, skip it
+                if (stripped.startswith('{"tool_call"') or 
+                    (stripped.startswith('{') and '"name"' in stripped and '"args"' in stripped and len(stripped) < 500)):
+                    continue  # Skip this message - it's an internal tool call, not user-facing
+            
             # Convert to Gemini message format
             role = "user" if msg["role"] == "user" else "model"
             conversation_history.append({
@@ -261,10 +288,23 @@ async def process_support_chat(
             })
     
     # Generate tool schemas for available tools (filter by permissions)
+    # Priority tools that should always be included (common/important operations)
+    priority_tools = ["get_tenants", "switch_tenant", "get_leads", "get_tickets", "get_deals"]
+    
     available_tools = []
     function_declarations = []
+    
+    # First, add priority tools
+    for tool_name in priority_tools:
+        if tool_name in MCP_TOOLS and check_tool_permission(tool_name, user_doc, org_id):
+            tool_func = MCP_TOOLS[tool_name]
+            schema = get_tool_schema(tool_name, tool_func)
+            available_tools.append(tool_name)
+            function_declarations.append(schema)
+    
+    # Then add remaining tools (excluding already added priority tools)
     for tool_name in MCP_TOOLS.keys():
-        if check_tool_permission(tool_name, user_doc, org_id):
+        if tool_name not in priority_tools and check_tool_permission(tool_name, user_doc, org_id):
             tool_func = MCP_TOOLS[tool_name]
             schema = get_tool_schema(tool_name, tool_func)
             available_tools.append(tool_name)
@@ -277,10 +317,17 @@ You can help users with:
 - Jira/JSM ticket management
 - Calendar and meeting scheduling
 - Organization and employee management
+- Organization/tenant context: Use get_tenants when users ask about their current organization, which organization they're in, or want to see their organizations. Use switch_tenant when users want to change their active organization.
 - General questions about the system
 
 When users ask you to perform actions, use the available function calling tools. Always explain what you're doing in a friendly, helpful manner.
 If a user doesn't have permission for a requested action, politely explain that you cannot perform that action due to permissions.
+
+For organization-related questions:
+- "Which organization am I in?" → Use get_tenants
+- "What organizations do I belong to?" → Use get_tenants
+- "Switch to organization X" → First use get_tenants to show options, then use switch_tenant with the tenant_id
+- "Change my organization" → Use get_tenants first, then switch_tenant
 
 Be concise but thorough. Format responses clearly with proper structure."""
     
@@ -323,7 +370,7 @@ Be concise but thorough. Format responses clearly with proper structure."""
                 tools_description = ""
                 if function_declarations:
                     tools_description = "\n\nAvailable tools you can use:\n"
-                    for tool_schema in function_declarations[:15]:  # Limit to avoid token limits
+                    for tool_schema in function_declarations[:20]:  # Increased limit to include more tools
                         tool_name = tool_schema.get("name", "")
                         tool_desc = tool_schema.get("description", "")
                         params = tool_schema.get("parameters", {}).get("properties", {})
@@ -340,7 +387,8 @@ Be concise but thorough. Format responses clearly with proper structure."""
                     
                     tools_description += "\nWhen you want to use a tool, respond in this exact JSON format:\n"
                     tools_description += '{"tool_call": {"name": "tool_name", "args": {"param1": "value1", "param2": "value2"}}}\n'
-                    tools_description += "Otherwise, respond normally with text.\n"
+                    tools_description += "IMPORTANT: After tool execution results are provided, you MUST respond in plain, readable text - NOT in JSON format. Always explain results in a conversational, user-friendly way.\n"
+                    tools_description += "If you are not using a tool, respond normally with text.\n"
                 
                 # Build conversation text from history
                 conversation_text = ""
@@ -385,15 +433,33 @@ Be concise but thorough. Format responses clearly with proper structure."""
                                 text_parts.append(part.text)
                         response_text = " ".join(text_parts) if text_parts else ""
                 
+                # Strip markdown code blocks from response (Gemini sometimes wraps JSON in ```json blocks)
+                # Remove markdown code blocks (```json ... ``` or ``` ... ```)
+                response_text = re.sub(r'```json\s*\n?(.*?)\n?```', r'\1', response_text, flags=re.DOTALL)
+                response_text = re.sub(r'```\s*\n?(.*?)\n?```', r'\1', response_text, flags=re.DOTALL)
+                response_text = response_text.strip()
+                
                 # Try to parse JSON tool calls from response
                 function_calls = []
                 try:
                     # Look for JSON blocks in the response
                     # Try to find JSON starting with { and ending with }
                     # We'll try to extract the tool_call JSON
+                    # Handle multiple formats:
+                    # 1. {"tool_call": {...}}
+                    # 2. {"name": "...", "args": {...}}
+                    # 3. tool_call\n{...} (text before JSON)
                     json_start = response_text.find('{"tool_call"')
                     if json_start == -1:
                         json_start = response_text.find('{"name"')
+                    # Also check for JSON after "tool_call" text (common in Telegram)
+                    if json_start == -1:
+                        tool_call_text_pos = response_text.lower().find('tool_call')
+                        if tool_call_text_pos != -1:
+                            # Look for { after "tool_call" text
+                            potential_start = response_text.find('{', tool_call_text_pos)
+                            if potential_start != -1:
+                                json_start = potential_start
                     
                     if json_start != -1:
                         # Find the matching closing brace
@@ -420,15 +486,37 @@ Be concise but thorough. Format responses clearly with proper structure."""
                                 function_calls.append(tool_call_json)
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
                     print(f"[Support AI] Could not parse tool call JSON: {str(e)}")
+                    # Even if parsing fails, if we detected JSON-like structure, don't return it
+                    if '{"tool_call"' in response_text or ('{"name"' in response_text and '"args"' in response_text):
+                        print(f"[Support AI] Detected JSON tool call format but couldn't parse - will skip")
+                        function_calls = ["_skip_this_response"]  # Marker to skip this response
                     pass
                 
                 # If there are function calls, execute them
                 if function_calls:
-                    # Add model's response to conversation (showing what it wanted to do)
-                    conversation_history.append({
-                        "role": "model",
-                        "parts": [{"text": response_text}]
-                    })
+                    # Check if this is a skip marker
+                    if function_calls == ["_skip_this_response"]:
+                        if iteration < max_iterations:
+                            # Add a message telling Gemini not to use JSON
+                            conversation_history.append({
+                                "role": "user",
+                                "parts": [{"text": "Your previous response contained JSON format which cannot be shown to users. Please respond in plain, readable text only. Do NOT use JSON or code blocks. Just explain what you're doing in natural language."}]
+                            })
+                            continue
+                        else:
+                            final_reply = "I'm having trouble processing that request. Please try rephrasing your question."
+                            break
+                    
+                    # Strip any JSON tool call from response_text before proceeding
+                    # This prevents text like "Okay, I will... {tool_call: {...}}" from being saved
+                    if response_text:
+                        # Remove JSON tool call patterns from response_text
+                        response_text = re.sub(r'\{[^}]*"tool_call"[^}]*\}|"tool_call"[^}]*\}', '', response_text, flags=re.DOTALL)
+                        response_text = re.sub(r'\{[^}]*"name"[^}]*"args"[^}]*\}', '', response_text, flags=re.DOTALL)
+                        response_text = response_text.strip()
+                    
+                    # DO NOT add the JSON tool call to conversation history - it's internal only
+                    # We'll only add the final readable response
                     
                     # Execute each function call
                     function_results = []
@@ -474,9 +562,19 @@ Be concise but thorough. Format responses clearly with proper structure."""
                                 print(f"[Support AI] Executed tool {func_name} successfully")
                             except Exception as e:
                                 print(f"[Support AI] Error executing tool {func_name}: {str(e)}")
+                                
+                                # Check if it's an authentication error (401/403)
+                                error_str = str(e).lower()
+                                if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+                                    error_msg = "Authentication failed. Your session may have expired. Please log in again."
+                                elif "403" in error_str or "forbidden" in error_str or "permission" in error_str:
+                                    error_msg = "You don't have permission to perform this action."
+                                else:
+                                    error_msg = f"Tool execution failed: {str(e)}"
+                                
                                 result = {
                                     "name": func_name,
-                                    "response": {"error": f"Tool execution failed: {str(e)}"}
+                                    "response": {"error": error_msg}
                                 }
                         
                         function_results.append(result)
@@ -496,7 +594,8 @@ Be concise but thorough. Format responses clearly with proper structure."""
                         else:
                             results_text += f"\n{func_name}: {json.dumps(func_response)}\n"
                     
-                    results_text += "\nPlease provide a helpful response to the user based on these results."
+                    # IMPORTANT: Explicitly tell Gemini to respond in plain text, NOT JSON
+                    results_text += "\n\nIMPORTANT: Respond to the user in plain, readable text. Do NOT use JSON format. Explain the results in a friendly, conversational way."
                     
                     # Add function results back to conversation as user message
                     conversation_history.append({
@@ -508,9 +607,46 @@ Be concise but thorough. Format responses clearly with proper structure."""
                     continue
                 
                 # No function calls - use the response text as final reply
+                # But first, check if it's JSON and strip it if so
                 if response_text:
-                    final_reply = response_text
-                    break
+                    # Check if response contains JSON tool call format (even if not parsed)
+                    stripped_text = response_text.strip()
+                    # Check for JSON tool call patterns (with or without markdown - already stripped above)
+                    # More aggressive detection: look for JSON anywhere in the response
+                    has_json_tool_call = (
+                        '{"tool_call"' in stripped_text or 
+                        ('{"name"' in stripped_text and '"args"' in stripped_text) or
+                        stripped_text.startswith('{"tool_call"') or
+                        (stripped_text.startswith('{') and '"name"' in stripped_text and '"args"' in stripped_text) or
+                        # Also check for JSON-like patterns in the middle of text
+                        ('"tool_call"' in stripped_text and '"name"' in stripped_text) or
+                        (stripped_text.count('{') >= 1 and '"name"' in stripped_text and '"args"' in stripped_text)
+                    )
+                    
+                    if has_json_tool_call:
+                        # This looks like a JSON tool call that wasn't parsed - skip it
+                        print(f"[Support AI] Warning: Response contains JSON tool call format, skipping: {stripped_text[:100]}")
+                        # Try one more iteration with stronger instruction
+                        if iteration < max_iterations:
+                            # Add a very strong instruction to not use JSON
+                            conversation_history.append({
+                                "role": "user",
+                                "parts": [{"text": f"CRITICAL: Your response contained JSON code which users cannot see. You MUST respond ONLY in plain, natural language text. Do NOT use JSON, code blocks, or any structured format. Just write a normal sentence explaining what happened. This is attempt {iteration + 1}."}]
+                            })
+                            continue
+                        else:
+                            # After max iterations, strip JSON and return what's left, or a fallback message
+                            # Try to extract any non-JSON text before/after the JSON
+                            parts = re.split(r'\{[^}]*"tool_call"[^}]*\}|"tool_call"[^}]*\}', stripped_text)
+                            non_json_parts = [p.strip() for p in parts if p.strip() and not p.strip().startswith('{')]
+                            if non_json_parts:
+                                final_reply = ' '.join(non_json_parts)
+                            else:
+                                final_reply = "I processed your request, but I'm having trouble formatting the response. Please try asking again."
+                            break
+                    else:
+                        final_reply = response_text
+                        break
                 else:
                     # If no text response, try to extract from response object
                     if hasattr(response, "text") and response.text:
@@ -537,6 +673,15 @@ Be concise but thorough. Format responses clearly with proper structure."""
         # If we still don't have a reply after all iterations
         if not final_reply:
             final_reply = "I apologize, but I couldn't generate a response. Please try rephrasing your question."
+        
+        # Final safeguard: Strip any JSON tool call format that might have leaked through
+        if final_reply:
+            stripped = final_reply.strip()
+            # If the entire response is just a JSON tool call, replace it with a helpful message
+            if (stripped.startswith('{"tool_call"') or 
+                (stripped.startswith('{') and '"name"' in stripped and '"args"' in stripped and len(stripped) < 500)):
+                # This looks like a JSON tool call - replace with helpful message
+                final_reply = "I processed your request, but I'm having trouble formatting the response. Please try asking again or rephrasing your question."
         
         # Save assistant reply to database
         support_chat_messages_collection.insert_one({

@@ -56,6 +56,8 @@ from mcp_server.tools.admin import (
     create_role,
     update_role,
     delete_role,
+    get_tenants,
+    switch_tenant,
 )
 
 # Register all tools
@@ -90,6 +92,8 @@ mcp.tool()(get_roles)
 mcp.tool()(create_role)
 mcp.tool()(update_role)
 mcp.tool()(delete_role)
+mcp.tool()(get_tenants)
+mcp.tool()(switch_tenant)
 
 
 if __name__ == "__main__":
