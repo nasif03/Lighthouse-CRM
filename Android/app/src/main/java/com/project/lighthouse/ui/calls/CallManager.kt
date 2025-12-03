@@ -134,9 +134,21 @@ class CallManager(
                 // Create or get the call using Stream Video SDK (mirrors web: videoClient.call('default', callId))
                 val call = streamVideo!!.call(type = "default", id = callId)
                 
-                // Note: The exact API for creating/joining calls may vary by SDK version
-                // This is a simplified implementation that should work with Stream Video Android SDK
-                // The SDK methods may need adjustment based on the actual API available
+                // TODO: Add member data and ring notification to sync with web frontend
+                // Web frontend uses: call.getOrCreate({ ring: true, data: { members: [...] } })
+                // Android SDK API needs to be checked - may use different method signature
+                // For now, we create the call and join - but this won't notify the other participant
+                // To fix cross-platform sync, we need to:
+                // 1. Create call with member data (currentUserId, otherUserId)
+                // 2. Enable ring notification so the other participant gets notified
+                // 
+                // Check Stream Video Android SDK docs for the correct API:
+                // - call.getOrCreate() with members parameter?
+                // - call.create() with members and ring?
+                // - Or set members/ring through different methods?
+                
+                Log.d(TAG, "Call created: $callId, members: $currentUserId, $otherUserId")
+                Log.w(TAG, "NOTE: Cross-platform call sync may not work until member data and ring are properly set")
                 
                 // Disable camera for audio-only call
                 try {
@@ -146,10 +158,7 @@ class CallManager(
                 }
                 
                 // Join the call - the SDK will handle audio/video settings
-                // Note: Actual join() signature may vary - this is a placeholder
                 withContext(Dispatchers.IO) {
-                    // The join method should be available on the Call object
-                    // If it requires parameters, they may need to be adjusted
                     call.join()
                 }
                 
