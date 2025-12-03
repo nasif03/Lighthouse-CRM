@@ -73,6 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_doc=bot_user_doc,
             auth_token="",  # Empty token - MCP tools will use CRM_API_TOKEN fallback
         )
+
         
         # Safeguard: Strip any JSON tool call format that might have leaked through
         if reply_text:

@@ -11,11 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// Stream Video SDK imports - COMMENTED OUT: Temporarily disabled to speed up compilation
-// import io.getstream.video.android.core.StreamVideo
-// import io.getstream.video.android.core.StreamVideoBuilder
-// import io.getstream.video.android.core.Call
-// import io.getstream.video.android.model.User
+// Stream Video SDK imports
+import io.getstream.video.android.core.StreamVideo
+import io.getstream.video.android.core.StreamVideoBuilder
+import io.getstream.video.android.core.Call
+import io.getstream.video.android.model.User
 
 /**
  * CallManager handles audio-only calls using Stream Video SDK.
@@ -31,11 +31,9 @@ class CallManager(
         private const val STREAM_API_KEY = "n8nh34grh4b3" // Same as frontend
     }
     
-    // Stream Video SDK objects - COMMENTED OUT: Temporarily disabled
-    // private var streamVideo: StreamVideo? = null
-    // private var activeCall: Call? = null
-    private var streamVideo: Any? = null
-    private var activeCall: Any? = null
+    // Stream Video SDK objects
+    private var streamVideo: StreamVideo? = null
+    private var activeCall: Call? = null
     private var isCallStarting = false
     private var currentUserId: String? = null
     private var currentUserToken: String? = null
@@ -49,10 +47,6 @@ class CallManager(
      * This should be called when user logs in.
      */
     suspend fun initializeClient(userId: String, userName: String?, userPicture: String?): Result<Unit> {
-        // COMMENTED OUT: Stream Video SDK temporarily disabled
-        Log.d(TAG, "Stream Video SDK disabled - initializeClient skipped")
-        return Result.success(Unit)
-        /*
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Initializing Stream Video client for user: $userId")
@@ -93,7 +87,6 @@ class CallManager(
                 Result.failure(e)
             }
         }
-        */
     }
     
     /**
@@ -108,9 +101,6 @@ class CallManager(
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        // COMMENTED OUT: Stream Video SDK temporarily disabled
-        onError("Call functionality is temporarily disabled")
-        /*
         if (isCallStarting) {
             onError("Call is already starting")
             return
@@ -189,21 +179,12 @@ class CallManager(
                 isCallStarting = false
             }
         }
-        */
     }
     
     /**
      * End the active call.
      */
     fun endCall(onComplete: () -> Unit) {
-        // COMMENTED OUT: Stream Video SDK temporarily disabled
-        scope.launch {
-            Log.d(TAG, "End call - Stream Video SDK disabled")
-            activeCall = null
-            _callState.value = null
-            onComplete()
-        }
-        /*
         scope.launch {
             try {
                 Log.d(TAG, "Ending call")
@@ -218,18 +199,12 @@ class CallManager(
                 onComplete()
             }
         }
-        */
     }
     
     /**
      * Toggle mute state of the call.
      */
     fun toggleMute(isMuted: Boolean) {
-        // COMMENTED OUT: Stream Video SDK temporarily disabled
-        scope.launch {
-            Log.d(TAG, "Toggle mute - Stream Video SDK disabled: $isMuted")
-        }
-        /*
         scope.launch {
             try {
                 activeCall?.microphone?.setEnabled(!isMuted)
@@ -238,7 +213,6 @@ class CallManager(
                 Log.e(TAG, "Failed to toggle mute", e)
             }
         }
-        */
     }
     
     /**
@@ -267,16 +241,6 @@ class CallManager(
      * Cleanup when user logs out.
      */
     fun cleanup() {
-        // COMMENTED OUT: Stream Video SDK temporarily disabled
-        scope.launch {
-            Log.d(TAG, "Cleanup - Stream Video SDK disabled")
-            activeCall = null
-            streamVideo = null
-            currentUserId = null
-            currentUserToken = null
-            _callState.value = null
-        }
-        /*
         scope.launch {
             activeCall?.leave()
             activeCall = null
@@ -285,6 +249,5 @@ class CallManager(
             currentUserToken = null
             _callState.value = null
         }
-        */
     }
 }

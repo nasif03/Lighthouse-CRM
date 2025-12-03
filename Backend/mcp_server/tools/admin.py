@@ -345,24 +345,24 @@ async def switch_tenant(
     tenant_id: str,
     auth_token: Optional[str] = None,
 ) -> dict:
-    """Switch the active organization (tenant) for the current user. Use this when users ask: "Switch to organization X", "Change my organization", "Set active organization to Y", "Switch organization", or want to change their current organization context. First use get_tenants to show available organizations, then use this to switch.
-    
-    Args:
-        tenant_id: ID of the organization to switch to (get this from get_tenants response)
-        auth_token: Firebase authentication token (required)
-    
-    Returns:
-        Success message with the new tenant ID
+    """Switch the active organization (tenant) for the current user. Use this when users ask: "Switch to organization X", ...
     """
     url = f"{API_BASE_URL}/api/tenants/switch"
-    payload = {"tenant_id": tenant_id}
+    # include both keys in case API expects tenantId (camelCase) or tenant_id (snake_case)
+    payload = {"tenant_id": tenant_id, "tenantId": tenant_id}
     
     response = await http_client.post(
         url,
         json=payload,
         headers=get_auth_headers(auth_token)
     )
-    response.raise_for_status()
+    # if non-2xx, return readable debug info instead of raising silently
+    if response.status_code >= 400:
+        try:
+            body = response.json()
+        except Exception:
+            body = response.text
+        raise RuntimeError(f"switch_tenant failed: {response.status_code} {body}")
     return response.json()
 
 

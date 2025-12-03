@@ -1,3 +1,4 @@
+
 package com.project.lighthouse.ui.settings
 
 import androidx.lifecycle.ViewModel
@@ -15,4 +16,5 @@ class SettingsViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
+
 

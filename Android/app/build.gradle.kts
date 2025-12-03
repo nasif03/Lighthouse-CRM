@@ -31,6 +31,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Optimize debug builds - don't include unnecessary resources
+            isDebuggable = true
+            isMinifyEnabled = false
+            // Use multiDex for debug builds to speed up compilation
+            multiDexEnabled = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -64,6 +71,11 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+        // Enable Kotlin compiler optimizations
+        freeCompilerArgs += listOf(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+        )
     }
     buildFeatures {
         compose = true
@@ -121,7 +133,6 @@ dependencies {
     // Web frontend uses @stream-io/video-react-sdk v1.27.1
     // Android SDK: Using latest version 1.18.0 from Maven Central
     // Package: io.getstream:stream-video-android-core
-    // COMMENTED OUT: Temporarily disabled to speed up compilation
-    // implementation("io.getstream:stream-video-android-core:1.18.0")
-    // implementation("io.getstream:stream-video-android-ui-compose:1.18.0")
+    implementation("io.getstream:stream-video-android-core:1.18.0")
+    implementation("io.getstream:stream-video-android-ui-compose:1.18.0")
 }

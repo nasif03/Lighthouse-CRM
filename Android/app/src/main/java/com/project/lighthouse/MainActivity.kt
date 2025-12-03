@@ -127,6 +127,25 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun shouldShowBottomBar(destination: NavDestination?): Boolean {
+        // Show bottom bar for all main destinations except sign-in and detail screens
+        val mainRoutes = listOf(
+            MainDestination.Dashboard.route,
+            MainDestination.Leads.route,
+            MainDestination.Contacts.route,
+            MainDestination.Accounts.route,
+            MainDestination.Deals.route,
+            MainDestination.Settings.route,
+            MainDestination.Gmail.route,
+            MainDestination.Meetings.route,
+            MainDestination.Chat.route,
+            MainDestination.Administration.route,
+            MainDestination.Calendar.route,
+            MainDestination.SupportAI.route
+        )
+        return destination?.route in mainRoutes
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -160,7 +179,7 @@ class MainActivity : ComponentActivity() {
 
                     Scaffold(
                         bottomBar = {
-                            val showBottomBar = authState.isAuthenticated && this@MainActivity.shouldShowBottomBar(currentDestination)
+                            val showBottomBar = authState.isAuthenticated && shouldShowBottomBar(currentDestination)
                             Log.d(TAG, "Bottom bar visible? $showBottomBar route=${currentDestination?.route}")
                             if (showBottomBar) {
                                 BottomSheetNavigation(
@@ -541,26 +560,20 @@ class MainActivity : ComponentActivity() {
                                 val currentUserId = authState.user?.id
                                 val scope = rememberCoroutineScope()
                                 
-                                // Call state management - COMMENTED OUT: Stream Video SDK temporarily disabled
+                                // Call state management
                                 var callState by remember { mutableStateOf(com.project.lighthouse.ui.calls.CallState()) }
-                                // val callManager = remember {
-                                //     com.project.lighthouse.ui.calls.CallManager(
-                                //         chatRepository = AppModule.getChatRepository(applicationContext),
-                                //         scope = scope,
-                                //         context = applicationContext
-                                //     )
-                                // }
-                                // val callManager: Any? = null // Not needed since all usages are commented out
+                                val callManager = remember {
+                                    com.project.lighthouse.ui.calls.CallManager(
+                                        chatRepository = AppModule.getChatRepository(applicationContext),
+                                        scope = scope,
+                                        context = applicationContext
+                                    )
+                                }
                                 
-                                // Audio permission launcher - COMMENTED OUT: Stream Video SDK temporarily disabled
+                                // Audio permission launcher
                                 val audioPermissionLauncher = rememberLauncherForActivityResult(
                                     contract = ActivityResultContracts.RequestPermission()
                                 ) { isGranted ->
-                                    // COMMENTED OUT: Call functionality temporarily disabled
-                                    callState = com.project.lighthouse.ui.calls.CallState(
-                                        errorMessage = "Call functionality is temporarily disabled"
-                                    )
-                                    /*
                                     if (isGranted) {
                                         // Permission granted - the call will be started in the callback
                                         val selectedChannel = chatState.selectedChannel
@@ -601,49 +614,49 @@ class MainActivity : ComponentActivity() {
                                             errorMessage = "Microphone permission is required for audio calls"
                                         )
                                     }
-                                    */
                                 }
                                 
-                                // Initialize Stream Video client when user is authenticated - COMMENTED OUT: Stream Video SDK temporarily disabled
-                                // LaunchedEffect(authState.user?.id, authState.user?.name) {
-                                //     val user = authState.user
-                                //     if (user != null && !callManager.isCallActive()) {
-                                //         scope.launch {
-                                //             val result = callManager.initializeClient(
-                                //                 userId = user.id,
-                                //                 userName = user.name,
-                                //                 userPicture = user.picture
-                                //             )
-                                //             result.onFailure { error ->
-                                //                 Log.e("MainActivity", "Failed to initialize Stream Video client: ${error.message}")
-                                //             }
-                                //         }
-                                //     }
-                                // }
+                                // Initialize Stream Video client when user is authenticated
+                                LaunchedEffect(authState.user?.id, authState.user?.name) {
+                                    val user = authState.user
+                                    if (user != null && !callManager.isCallActive()) {
+                                        scope.launch {
+                                            val result = callManager.initializeClient(
+                                                userId = user.id,
+                                                userName = user.name,
+                                                userPicture = user.picture
+                                            )
+                                            result.onFailure { error ->
+                                                Log.e("MainActivity", "Failed to initialize Stream Video client: ${error.message}")
+                                            }
+                                        }
+                                    }
+                                }
 
-                                // Show call screen if call is active - COMMENTED OUT: Stream Video SDK temporarily disabled
-                                // val participantName = callState.participantName
-                                // if (callState.isCallActive && participantName != null) {
-                                //     com.project.lighthouse.ui.calls.CallScreen(
-                                //         participantName = participantName,
-                                //         callDuration = callState.callDuration,
-                                //         isMuted = callState.isMuted,
-                                //         isSpeakerOn = callState.isSpeakerOn,
-                                //         onToggleMute = {
-                                //             callState = callState.copy(isMuted = !callState.isMuted)
-                                //         },
-                                //         onToggleSpeaker = {
-                                //             callState = callState.copy(isSpeakerOn = !callState.isSpeakerOn)
-                                //         },
-                                //         onEndCall = {
-                                //             callManager.endCall {
-                                //                 callState = com.project.lighthouse.ui.calls.CallState()
-                                //             }
-                                //         }
-                                //     )
-                                // } else {
-                                // COMMENTED OUT: Call screen disabled - keeping else content
-                                run {
+                                // Show call screen if call is active
+                                val participantName = callState.participantName
+                                if (callState.isCallActive && participantName != null) {
+                                    com.project.lighthouse.ui.calls.CallScreen(
+                                        participantName = participantName,
+                                        callDuration = callState.callDuration,
+                                        isMuted = callState.isMuted,
+                                        isSpeakerOn = callState.isSpeakerOn,
+                                        onToggleMute = {
+                                            callManager.toggleMute(callState.isMuted)
+                                            callState = callState.copy(isMuted = !callState.isMuted)
+                                        },
+                                        onToggleSpeaker = {
+                                            callManager.toggleSpeaker(callState.isSpeakerOn)
+                                            callState = callState.copy(isSpeakerOn = !callState.isSpeakerOn)
+                                        },
+                                        onEndCall = {
+                                            callManager.endCall {
+                                                callState = com.project.lighthouse.ui.calls.CallState()
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    // Show chat screen when not in call
                                     val selectedChannel = chatState.selectedChannel
                                     ChatScreen(
                                         state = chatState,
@@ -657,11 +670,6 @@ class MainActivity : ComponentActivity() {
                                         onGoBackToChannelList = { chatViewModel.goBackToChannelList() },
                                         onDismissMessage = { chatViewModel.dismissMessage() },
                                         onStartCall = { participantId, participantName ->
-                                            // COMMENTED OUT: Stream Video SDK temporarily disabled
-                                            callState = com.project.lighthouse.ui.calls.CallState(
-                                                errorMessage = "Call functionality is temporarily disabled"
-                                            )
-                                            /*
                                             if (currentUserId != null && selectedChannel != null) {
                                                 // Check and request audio permission before starting call
                                                 val hasAudioPermission = ContextCompat.checkSelfPermission(
@@ -696,7 +704,6 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
                                             }
-                                            */
                                         }
                                     )
                                     
@@ -932,32 +939,13 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
             }
         }
-    }
     }
 
     override fun onResume() {
         super.onResume()
         authViewModel.checkAuthState()
-    }
-
-    private fun shouldShowBottomBar(destination: NavDestination?): Boolean {
-        // Show bottom bar for all main destinations except sign-in and detail screens
-        val mainRoutes = listOf(
-            MainDestination.Dashboard.route,
-            MainDestination.Leads.route,
-            MainDestination.Contacts.route,
-            MainDestination.Accounts.route,
-            MainDestination.Deals.route,
-            MainDestination.Settings.route,
-            MainDestination.Gmail.route,
-            MainDestination.Meetings.route,
-            MainDestination.Chat.route,
-            MainDestination.Administration.route,
-            MainDestination.Calendar.route,
-            MainDestination.SupportAI.route
-        )
-        return destination?.route in mainRoutes
     }
 }
